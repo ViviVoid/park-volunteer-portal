@@ -35,6 +35,33 @@ export async function initDatabase() {
     )
   `);
 
+  // Maps table
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS maps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      image_bounds TEXT,
+      is_default INTEGER DEFAULT 0,
+      parent_map_id INTEGER,
+      crop_bounds TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (parent_map_id) REFERENCES maps(id)
+    )
+  `);
+  
+  // Add parent_map_id and crop_bounds columns if they don't exist
+  try {
+    await dbRun(`ALTER TABLE maps ADD COLUMN parent_map_id INTEGER`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+  try {
+    await dbRun(`ALTER TABLE maps ADD COLUMN crop_bounds TEXT`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+
   // Location tags
   await dbRun(`
     CREATE TABLE IF NOT EXISTS location_tags (
@@ -46,7 +73,9 @@ export async function initDatabase() {
       category TEXT,
       visible INTEGER DEFAULT 1,
       color TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      map_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (map_id) REFERENCES maps(id)
     )
   `);
 
@@ -75,6 +104,20 @@ export async function initDatabase() {
     await dbRun(`ALTER TABLE location_tags ADD COLUMN color TEXT`);
   } catch (e: any) {
     // Column already exists, ignore
+  }
+  try {
+    await dbRun(`ALTER TABLE location_tags ADD COLUMN map_id INTEGER`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+
+  // Remove unused associated_map_id column if it exists (SQLite 3.35.0+)
+  try {
+    await dbRun(`ALTER TABLE location_tags DROP COLUMN associated_map_id`);
+    console.log('Removed unused associated_map_id column from location_tags table');
+  } catch (e: any) {
+    // Column doesn't exist or SQLite version doesn't support DROP COLUMN
+    // This is fine - the column will remain unused in older SQLite versions
   }
 
   // Position templates
@@ -172,6 +215,42 @@ export async function initDatabase() {
       FOREIGN KEY (template_id) REFERENCES position_templates(id)
     )
   `);
+
+  // Organization announcements/updates
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS organization_announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      link TEXT,
+      type TEXT NOT NULL CHECK(type IN ('email', 'sms', 'both')),
+      cron_expression TEXT,
+      is_active INTEGER DEFAULT 1,
+      last_sent_at DATETIME,
+      next_send_at DATETIME,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+
+  // Migrate existing announcements: rename message to description and add link column
+  try {
+    await dbRun(`ALTER TABLE organization_announcements ADD COLUMN description TEXT`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+  try {
+    await dbRun(`ALTER TABLE organization_announcements ADD COLUMN link TEXT`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+  // Migrate data from message to description if needed
+  try {
+    await dbRun(`UPDATE organization_announcements SET description = message WHERE description IS NULL AND message IS NOT NULL`);
+  } catch (e: any) {
+    // Migration not needed or already done
+  }
 
   // Create default admin user if it doesn't exist
   const adminExists = await dbGet("SELECT id FROM users WHERE email = 'admin@park.local'");
