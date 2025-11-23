@@ -43,7 +43,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
   const [selectedMapId, setSelectedMapId] = useState<number | null>(null);
   const [currentMap, setCurrentMap] = useState<any>(null);
   const [showMapForm, setShowMapForm] = useState(false);
-  const [mapFormData, setMapFormData] = useState({ name: '', is_default: false });
+  const [mapFormData, setMapFormData] = useState({ name: '', is_default: false, public: false });
   const { toasts, showToast, removeToast } = useToast();
   const tagRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const visibilityMenuRef = useRef<HTMLDivElement | null>(null);
@@ -149,6 +149,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     const formData = new FormData();
     formData.append('name', mapFormData.name);
     formData.append('is_default', mapFormData.is_default ? 'true' : 'false');
+    formData.append('public', mapFormData.public ? 'true' : 'false');
     
     const fileInput = document.getElementById('map-image-input') as HTMLInputElement;
     if (!fileInput?.files?.[0]) {
@@ -161,7 +162,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       await adminAPI.createMap(formData);
       showToast('Map created successfully', 'success');
       setShowMapForm(false);
-      setMapFormData({ name: '', is_default: false });
+      setMapFormData({ name: '', is_default: false, public: false });
       loadMaps();
     } catch (error: any) {
       showToast(error.response?.data?.error || 'Failed to create map', 'error');
@@ -252,6 +253,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
         const formData = new FormData();
         formData.append('name', mapName.trim());
         formData.append('is_default', 'false');
+        formData.append('public', 'false');
         formData.append('image', blob, `${mapName.replace(/\s+/g, '-').toLowerCase()}.png`);
         formData.append('parent_map_id', currentMap.id.toString());
         formData.append('crop_bounds', JSON.stringify({ minX, maxX, minY, maxY }));
@@ -274,6 +276,18 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     try {
       const formData = new FormData();
       formData.append('is_default', isDefault ? 'true' : 'false');
+      await adminAPI.updateMap(mapId, formData);
+      showToast('Map updated successfully', 'success');
+      loadMaps();
+    } catch (error: any) {
+      showToast('Failed to update map', 'error');
+    }
+  };
+
+  const handleUpdateMapPublic = async (mapId: number, isPublic: boolean) => {
+    try {
+      const formData = new FormData();
+      formData.append('public', isPublic ? 'true' : 'false');
       await adminAPI.updateMap(mapId, formData);
       showToast('Map updated successfully', 'success');
       loadMaps();
@@ -619,15 +633,26 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                 {!isMobile && (
                   <>
                     {currentMap && (
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                        <input
-                          type="checkbox"
-                          checked={currentMap.is_default === 1}
-                          onChange={(e) => handleUpdateMapDefault(currentMap.id, e.target.checked)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        Default
-                      </label>
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={currentMap.is_default === 1}
+                            onChange={(e) => handleUpdateMapDefault(currentMap.id, e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          Default
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={currentMap.public === 1}
+                            onChange={(e) => handleUpdateMapPublic(currentMap.id, e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          Public
+                        </label>
+                      </>
                     )}
                     <button
                       onClick={() => setShowMapForm(true)}
@@ -1561,17 +1586,32 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                   required
                 />
               </div>
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={mapFormData.is_default}
-                    onChange={(e) => setMapFormData({ ...mapFormData, is_default: e.target.checked })}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  Set as default map
-                </label>
-              </div>
+              {!isMobile && (
+                <>
+                  <div className="form-group">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={mapFormData.is_default}
+                        onChange={(e) => setMapFormData({ ...mapFormData, is_default: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      Set as default map
+                    </label>
+                  </div>
+                  <div className="form-group">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={mapFormData.public}
+                        onChange={(e) => setMapFormData({ ...mapFormData, public: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      Make map publicly visible
+                    </label>
+                  </div>
+                </>
+              )}
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
                 <button type="submit" className="btn-primary" style={{ flex: 1 }}>
                   Create Map

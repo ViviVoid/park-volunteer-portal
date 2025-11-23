@@ -2,12 +2,36 @@ import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
 import bcrypt from 'bcryptjs';
 
-const db = new sqlite3.Database('./volunteer_portal.db');
+let db: sqlite3.Database | null = null;
+
+// Get or create database connection
+function getDb(): sqlite3.Database {
+  if (!db) {
+    db = new sqlite3.Database('./volunteer_portal.db');
+    // Handle connection errors and recreate if needed
+    db.on('error', (err: Error) => {
+      console.error('Database error:', err);
+      // Close and recreate connection
+      if (db) {
+        db.close((closeErr) => {
+          if (closeErr) {
+            console.error('Error closing database:', closeErr);
+          }
+          db = null;
+          // Recreate connection
+          getDb();
+        });
+      }
+    });
+  }
+  return db;
+}
 
 // Custom dbRun wrapper to preserve lastID
 export function dbRun(sql: string, params?: any[]): Promise<{ lastID: number; changes: number }> {
   return new Promise((resolve, reject) => {
-    db.run(sql, params || [], function(err) {
+    const database = getDb();
+    database.run(sql, params || [], function(err) {
       if (err) {
         reject(err);
       } else {
@@ -17,8 +41,15 @@ export function dbRun(sql: string, params?: any[]): Promise<{ lastID: number; ch
   });
 }
 
-export const dbGet = promisify(db.get.bind(db));
-export const dbAll = promisify(db.all.bind(db));
+export function dbGet(sql: string, params?: any[]): Promise<any> {
+  const database = getDb();
+  return promisify(database.get.bind(database))(sql, params);
+}
+
+export function dbAll(sql: string, params?: any[]): Promise<any[]> {
+  const database = getDb();
+  return promisify(database.all.bind(database))(sql, params);
+}
 
 export async function initDatabase() {
   // Users table (admins and volunteers)
@@ -58,6 +89,12 @@ export async function initDatabase() {
   }
   try {
     await dbRun(`ALTER TABLE maps ADD COLUMN crop_bounds TEXT`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+  // Add public column if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE maps ADD COLUMN public INTEGER DEFAULT 0`);
   } catch (e: any) {
     // Column already exists, ignore
   }
@@ -304,7 +341,18 @@ export async function initDatabase() {
     `, ['admin@park.local', passwordHash, 'Park Administrator']);
     console.log('Default admin created: admin@park.local / admin123');
   }
+
+  // Create default volunteer user if it doesn't exist
+  const volunteerExists = await dbGet("SELECT id FROM users WHERE LOWER(email) = LOWER('test@t.t')");
+  if (!volunteerExists) {
+    const passwordHash = await bcrypt.hash('t123', 10);
+    await dbRun(`
+      INSERT INTO users (email, password_hash, name, role)
+      VALUES (?, ?, ?, 'volunteer')
+    `, ['test@t.t', passwordHash, 'Test Volunteer']);
+    console.log('Default volunteer created: test@t.t / t123');
+  }
 }
 
-export { db };
+export { getDb as db };
 

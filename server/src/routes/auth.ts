@@ -48,7 +48,7 @@ router.post('/register', [
 
 // Login
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
+  body('email').trim().notEmpty().withMessage('Email is required'),
   body('password').notEmpty()
 ], async (req, res) => {
   try {
@@ -59,7 +59,8 @@ router.post('/login', [
 
     const { email, password } = req.body;
 
-    const user: any = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
+    // Use case-insensitive email lookup
+    const user: any = await dbGet('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [email]);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }

@@ -304,6 +304,7 @@ router.get('/maps', async (req, res) => {
 router.post('/maps', upload.single('image'), [
   body('name').trim().notEmpty(),
   body('is_default').optional().isBoolean().toBoolean(),
+  body('public').optional().isBoolean().toBoolean(),
   body('image_bounds').optional(),
   body('parent_map_id').optional().isInt().toInt(),
   body('crop_bounds').optional()
@@ -318,7 +319,7 @@ router.post('/maps', upload.single('image'), [
       return res.status(400).json({ error: 'Image file is required' });
     }
 
-    const { name, is_default, image_bounds, parent_map_id, crop_bounds } = req.body;
+    const { name, is_default, public: isPublic, image_bounds, parent_map_id, crop_bounds } = req.body;
     const imageUrl = `/uploads/maps/${req.file.filename}`;
 
     // If this is set as default, unset all other defaults
@@ -349,11 +350,12 @@ router.post('/maps', upload.single('image'), [
     }
 
     const isDefaultValue = is_default ? 1 : 0;
+    const publicValue = isPublic ? 1 : 0;
     const parentMapIdValue = parent_map_id ? parseInt(parent_map_id) : null;
 
     const result = await dbRun(
-      'INSERT INTO maps (name, image_url, image_bounds, is_default, parent_map_id, crop_bounds) VALUES (?, ?, ?, ?, ?, ?)',
-      [name.trim(), imageUrl, imageBoundsValue, isDefaultValue, parentMapIdValue, cropBoundsValue]
+      'INSERT INTO maps (name, image_url, image_bounds, is_default, public, parent_map_id, crop_bounds) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name.trim(), imageUrl, imageBoundsValue, isDefaultValue, publicValue, parentMapIdValue, cropBoundsValue]
     );
 
     const map = await dbGet('SELECT * FROM maps WHERE id = ?', [result.lastID]);
@@ -366,6 +368,7 @@ router.post('/maps', upload.single('image'), [
 router.put('/maps/:id', upload.single('image'), [
   body('name').optional().trim().notEmpty(),
   body('is_default').optional().isBoolean().toBoolean(),
+  body('public').optional().isBoolean().toBoolean(),
   body('image_bounds').optional()
 ], async (req, res) => {
   try {
@@ -375,7 +378,7 @@ router.put('/maps/:id', upload.single('image'), [
     }
 
     const { id } = req.params;
-    const { name, is_default, image_bounds } = req.body;
+    const { name, is_default, public: isPublic, image_bounds } = req.body;
 
     const updates: string[] = [];
     const values: any[] = [];
@@ -420,6 +423,11 @@ router.put('/maps/:id', upload.single('image'), [
       }
       updates.push('is_default = ?');
       values.push(is_default ? 1 : 0);
+    }
+
+    if (isPublic !== undefined) {
+      updates.push('public = ?');
+      values.push(isPublic ? 1 : 0);
     }
 
     if (updates.length === 0) {
@@ -815,11 +823,11 @@ router.delete('/templates/:id', async (req, res) => {
 
 // Post position from template
 router.post('/positions', [
-  body('template_id').isInt(),
-  body('date').isISO8601(),
-  body('start_time').matches(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/),
-  body('end_time').optional().matches(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/),
-  body('max_volunteers').optional().isInt({ min: 1 })
+  body('template_id').isInt().toInt(),
+  body('date').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Date must be in YYYY-MM-DD format'),
+  body('start_time').matches(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Start time must be in HH:MM format'),
+  body('end_time').optional({ nullable: true, checkFalsy: true }).matches(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/).withMessage('End time must be in HH:MM format'),
+  body('max_volunteers').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).toInt()
 ], async (req: AuthRequest, res) => {
   try {
     const errors = validationResult(req);

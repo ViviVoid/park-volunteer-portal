@@ -4,6 +4,9 @@ A full-stack volunteer management system for local parks with administrative con
 
 ## Features
 
+- **Public Map View**: Interactive map accessible to visitors without login, showing public maps with location descriptions
+- **Interactive Maps**: Create and manage multiple maps with location tags, points, polygons, and categories
+- **Map Visibility Control**: Mark maps as public or private - only public maps are visible to visitors
 - **Volunteer Dashboard**: View and sign up for available volunteer positions
 - **Admin Dashboard**: Manage position templates, post positions, and schedule recurring posts
 - **Notifications**: Email and SMS notifications based on volunteer preferences
@@ -41,12 +44,17 @@ The application will be available at:
 - Frontend: http://localhost:3000
 - Backend: http://localhost:5000
 
-## Default Admin Credentials
+## Default Credentials
 
+### Admin User
 - Email: `admin@park.local`
 - Password: `admin123`
 
-**Important**: Change the default admin password in production!
+### Test Volunteer User
+- Email: `test@t.t`
+- Password: `t123`
+
+**Important**: Change the default passwords in production!
 
 ## Environment Variables
 
@@ -61,13 +69,25 @@ See `server/.env.example` for required configuration:
 
 ## Usage
 
+### For Visitors
+
+1. Visit the homepage to view the public interactive map
+2. Navigate between public maps using the map selector
+3. Click on location markers or areas to see descriptions
+4. Use the "Admin Login" link to access administrative features
+
 ### For Admins
 
 1. Login with admin credentials
-2. Create position templates in the Templates section
-3. Post positions from templates or create scheduled recurring posts
-4. Notify volunteers about new positions
-5. **Google Calendar Integration**:
+2. **Manage Maps**:
+   - Create and upload map images
+   - Add location tags with points, polygons, or circles
+   - Mark maps as public to make them visible to visitors
+   - Set default maps and organize map hierarchy
+3. Create position templates in the Templates section
+4. Post positions from templates or create scheduled recurring posts
+5. Notify volunteers about new positions
+6. **Google Calendar Integration**:
    - Navigate to "Google Calendar Integration" in the admin dashboard
    - Connect your Google account(s) to enable calendar features
    - Set up forwarding policies to automatically send scheduler output to specific Google Calendars
@@ -75,7 +95,7 @@ See `server/.env.example` for required configuration:
 
 ### For Volunteers
 
-1. Register for an account
+1. Register for an account or login with volunteer credentials
 2. Set notification preferences (email/phone/both)
 3. Browse available positions and sign up
 4. View your signups in the My Signups section

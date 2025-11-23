@@ -257,3 +257,166 @@ The existing portal can be extended with:
 
 The existing Park Volunteer Portal provides a solid foundation for the Milwaukee Domes Alliance with minimal modifications. The recommended approach prioritizes cost-effective, maintainable solutions that leverage the existing codebase while addressing all seven key considerations. AI features should be considered as optional enhancements rather than core requirements, ensuring the solution remains accessible and sustainable for a non-profit organization.
 
+## Sources and Cost References
+
+### Hosting Services
+
+**Heroku Pricing:**
+- Heroku. (2024). "Pricing - Heroku." Retrieved from https://www.heroku.com/pricing
+- Basic dyno: $7/month; Standard-1X: $25/month; Standard-2X: $50/month
+- PostgreSQL add-on: Hobby Dev (free), Hobby Basic ($9/month), Standard-0 ($50/month)
+
+**Railway Pricing:**
+- Railway. (2024). "Pricing - Railway." Retrieved from https://railway.app/pricing
+- Hobby plan: $5/month + usage; Pro plan: $20/month + usage
+- PostgreSQL: Included in plans, usage-based pricing
+
+**Azure App Service:**
+- Microsoft Azure. (2024). "App Service Pricing." Retrieved from https://azure.microsoft.com/en-us/pricing/details/app-service/
+- Free tier available; Basic B1: ~$13/month; Standard S1: ~$70/month
+- Non-profit discounts available through TechSoup
+
+**AWS Pricing:**
+- Amazon Web Services. (2024). "AWS Pricing Calculator." Retrieved from https://calculator.aws/
+- EC2 t3.micro: ~$7-10/month; RDS PostgreSQL db.t3.micro: ~$15-20/month
+- Non-profit credits available through AWS Imagine Grant
+
+### Translation Services
+
+**Google Cloud Translation API:**
+- Google Cloud. (2024). "Translation API Pricing." Retrieved from https://cloud.google.com/translate/pricing
+- Standard: $20 per 1 million characters
+- Advanced: $20 per 1 million characters (with additional features)
+- Free tier: 500,000 characters/month
+
+**Azure Translator:**
+- Microsoft Azure. (2024). "Translator Pricing." Retrieved from https://azure.microsoft.com/en-us/pricing/details/cognitive-services/translator/
+- Standard: $10 per 1 million characters
+- Free tier: 2 million characters/month
+
+**Translation Management Tools:**
+- Crowdin. (2024). "Pricing - Crowdin." Retrieved from https://crowdin.com/pricing
+- Free tier available; Team plan: $50/month
+- Lokalise. (2024). "Pricing - Lokalise." Retrieved from https://lokalise.com/pricing
+- Starter: $120/month; Professional: $200/month
+
+### Generative AI Services
+
+**OpenAI API (GPT-4):**
+- OpenAI. (2024). "Pricing - OpenAI API." Retrieved from https://openai.com/api/pricing/
+- GPT-4: $0.03 per 1K input tokens, $0.06 per 1K output tokens
+- GPT-3.5 Turbo: $0.0005 per 1K input tokens, $0.0015 per 1K output tokens
+- Typical moderate usage: 50K-200K tokens/month = $50-200/month
+
+**Anthropic Claude API:**
+- Anthropic. (2024). "Claude API Pricing." Retrieved from https://www.anthropic.com/pricing
+- Claude 3 Opus: $0.015 per 1K input tokens, $0.075 per 1K output tokens
+- Claude 3 Sonnet: $0.003 per 1K input tokens, $0.015 per 1K output tokens
+- Typical moderate usage: 50K-200K tokens/month = $50-200/month
+
+**Google Gemini API:**
+- Google AI. (2024). "Gemini API Pricing." Retrieved from https://ai.google.dev/pricing
+- Gemini Pro: $0.00025 per 1K input tokens, $0.0005 per 1K output tokens
+- Free tier: 60 requests per minute
+
+### Analytics and Business Intelligence
+
+**Google Analytics:**
+- Google. (2024). "Google Analytics Pricing." Retrieved from https://marketingplatform.google.com/about/analytics/pricing/
+- Standard (GA4): Free
+- Analytics 360: Custom pricing, typically $150,000+/year
+
+**Tableau:**
+- Tableau. (2024). "Tableau Pricing." Retrieved from https://www.tableau.com/pricing
+- Creator: $70/month per user
+- Explorer: $42/month per user
+- Viewer: $15/month per user
+
+**Power BI:**
+- Microsoft. (2024). "Power BI Pricing." Retrieved from https://powerbi.microsoft.com/en-us/pricing/
+- Pro: $10/month per user
+- Premium: $20/month per user
+- Non-profit discounts available
+
+**Mixpanel:**
+- Mixpanel. (2024). "Mixpanel Pricing." Retrieved from https://mixpanel.com/pricing/
+- Starter: Free (up to 20M events/month)
+- Growth: $25/month (up to 100M events/month)
+- Enterprise: Custom pricing, typically $100-500/month
+
+### Database Services
+
+**PostgreSQL Managed Hosting:**
+- Heroku Postgres: Hobby Dev (free), Hobby Basic ($9/month), Standard-0 ($50/month)
+- Railway PostgreSQL: Included in plans, usage-based
+- AWS RDS PostgreSQL: db.t3.micro ~$15-20/month
+- Azure Database for PostgreSQL: Basic tier ~$25/month
+- Supabase: Free tier available; Pro: $25/month
+
+**Self-Hosted PostgreSQL:**
+- Can be hosted on existing infrastructure at no additional cost
+- Requires server maintenance and backup management
+
+### Cloud Storage and CDN
+
+**AWS S3:**
+- Amazon Web Services. (2024). "Amazon S3 Pricing." Retrieved from https://aws.amazon.com/s3/pricing/
+- First 50 TB: $0.023 per GB/month
+- Data transfer: First 1 GB/month free, then $0.09 per GB
+
+**Cloudflare:**
+- Cloudflare. (2024). "Cloudflare Pricing." Retrieved from https://www.cloudflare.com/pricing/
+- Free plan available
+- Pro: $20/month
+- Business: $200/month
+
+### Email and SMS Services
+
+**Twilio (SMS):**
+- Twilio. (2024). "Twilio Pricing." Retrieved from https://www.twilio.com/pricing
+- US SMS: $0.0075 per message
+- Typical non-profit usage: 500-2000 messages/month = $4-15/month
+
+**SendGrid (Email):**
+- SendGrid. (2024). "SendGrid Pricing." Retrieved from https://sendgrid.com/pricing/
+- Free: 100 emails/day
+- Essentials: $19.95/month (50K emails)
+- Pro: $89.95/month (100K emails)
+
+**Nodemailer (Email):**
+- Open-source, free to use
+- Requires SMTP server (can use free services like Gmail SMTP or paid services)
+
+### Domain and SSL
+
+**Domain Registration:**
+- Namecheap: ~$10-15/year for .org domains
+- Google Domains: ~$12/year
+- Non-profit discounts often available
+
+**SSL Certificates:**
+- Let's Encrypt: Free (automated)
+- Cloudflare: Free SSL included
+- Paid SSL: $50-200/year (not necessary with free options)
+
+### Cost Calculation Notes
+
+All cost estimates in this document are based on:
+- Typical non-profit usage patterns (50-500 active users)
+- Moderate traffic volumes (10K-100K API calls/month)
+- Standard feature sets without enterprise add-ons
+- Non-profit discounts where applicable (TechSoup, AWS Imagine Grant, etc.)
+- Pricing as of 2024; actual costs may vary based on usage and provider promotions
+
+Cost ranges reflect:
+- Lower end: Minimal usage, free tiers, volunteer-maintained solutions
+- Upper end: Moderate usage, paid tiers, some managed services
+- Actual costs will depend on specific usage patterns and requirements
+
+### Additional Resources
+
+- TechSoup: Non-profit technology discounts and grants (https://www.techsoup.org/)
+- AWS Imagine Grant: Cloud credits for non-profits
+- Google for Nonprofits: Free and discounted services
+- Microsoft Nonprofit Programs: Discounted and free services
+

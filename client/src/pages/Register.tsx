@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import Toast from '../components/Toast';
@@ -109,7 +109,10 @@ const Register: React.FC = () => {
           </button>
         </form>
         <p className="auth-link">
-          Already have an account? <a href="/login">Login here</a>
+          Already have an account? <Link to="/login">Login here</Link>
+        </p>
+        <p className="auth-link" style={{ marginTop: '0.5rem' }}>
+          <Link to="/">← Back to Map</Link>
         </p>
       </div>
     </div>

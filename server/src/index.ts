@@ -10,6 +10,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
 import volunteerRoutes from './routes/volunteer';
+import publicRoutes from './routes/public';
 import { setupCronJobs } from './services/scheduler';
 
 const app = express();
@@ -32,6 +33,7 @@ initDatabase().then(() => {
   
   // Routes
   app.use('/api/auth', authRoutes);
+  app.use('/api/public', publicRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/volunteer', volunteerRoutes);
   

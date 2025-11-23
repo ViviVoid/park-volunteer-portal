@@ -153,13 +153,23 @@ const VolunteerManagement: React.FC = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await adminAPI.createPosition(positionFormData);
+      // Convert form data to proper types
+      const positionData = {
+        template_id: parseInt(positionFormData.template_id, 10),
+        date: positionFormData.date, // Date input already provides ISO8601 format
+        start_time: positionFormData.start_time, // Time input provides HH:MM format
+        end_time: positionFormData.end_time || undefined,
+        max_volunteers: positionFormData.max_volunteers ? parseInt(positionFormData.max_volunteers, 10) : undefined
+      };
+      await adminAPI.createPosition(positionData);
       setShowPositionForm(false);
       setPositionFormData({ template_id: '', date: '', start_time: '', end_time: '', max_volunteers: '' });
       loadPositions();
       showToast('Position created and volunteers notified!', 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.error || 'Failed to create position', 'error');
+      const errorMessage = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Failed to create position';
+      showToast(errorMessage, 'error');
+      console.error('Position creation error:', error.response?.data);
     } finally {
       setSubmitting(false);
     }
