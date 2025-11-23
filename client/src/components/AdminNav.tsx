@@ -14,9 +14,9 @@ const AdminNav: React.FC = () => {
       <h1>Park Volunteer Portal - Admin</h1>
       <div className="nav-links">
         <Link to="/admin" className={isActive('/admin') ? 'active' : ''}>Dashboard</Link>
-        <Link to="/admin/templates" className={isActive('/admin/templates') ? 'active' : ''}>Templates</Link>
-        <Link to="/admin/positions" className={isActive('/admin/positions') ? 'active' : ''}>Positions</Link>
-        <Link to="/admin/scheduled" className={isActive('/admin/scheduled') ? 'active' : ''}>Scheduled Posts</Link>
+        <Link to="/admin/volunteer-management" className={isActive('/admin/volunteer-management') ? 'active' : ''}>Volunteer Management</Link>
+        <Link to="/admin/communications" className={isActive('/admin/communications') ? 'active' : ''}>Communications</Link>
+        <Link to="/admin/interactive-map" className={isActive('/admin/interactive-map') ? 'active' : ''}>Interactive Map</Link>
         <span className="user-info">{user?.name}</span>
         <button onClick={logout} className="btn-logout">Logout</button>
       </div>
