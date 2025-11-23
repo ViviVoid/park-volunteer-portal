@@ -1,0 +1,153 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Milwaukee Domes Nature-Inspired Color Palette */
+  --primary-color: #2d5016; /* Deep forest green - primary brand color */
+  --primary-light: #4a7c2a; /* Lighter green for accents */
+  --primary-dark: #1a3009; /* Darker green for depth */
+  --secondary-color: #5b8c3a; /* Medium green - secondary brand color */
+  --accent-color: #7fb347; /* Fresh green accent */
+  --success-color: #2d5016; /* Use primary green for success */
+  --danger-color: #c53030; /* Warm red for errors */
+  --warning-color: #d69e2e; /* Golden yellow for warnings */
+  --info-color: #3182ce; /* Sky blue for info */
+  --text-primary: #1a202c; /* Deep charcoal for primary text */
+  --text-secondary: #4a5568; /* Medium gray for secondary text */
+  --bg-primary: #ffffff; /* Pure white */
+  --bg-secondary: #f7fafc; /* Very light gray background */
+  --bg-tertiary: #edf2f7; /* Light gray for subtle backgrounds */
+  --bg-nature: #f0f7ed; /* Very light green tint for nature feel */
+  --border-color: #cbd5e0; /* Light gray borders */
+  --border-nature: #a0c085; /* Light green borders for nature accents */
+  --shadow-sm: 0 1px 2px 0 rgba(45, 80, 22, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(45, 80, 22, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(45, 80, 22, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(45, 80, 22, 0.1);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Loading Spinner */
+.spinner {
+  border: 3px solid var(--bg-tertiary);
+  border-top: 3px solid var(--primary-color);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 2rem auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Toast Notification */
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  z-index: 10000;
+  animation: slideIn 0.3s ease-out;
+  max-width: 400px;
+}
+
+.toast.success {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.toast.error {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.toast.info {
+  background-color: var(--info-color);
+  color: white;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+
+.empty-state-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+/* Badge */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge.success {
+  background-color: #c6f6d5;
+  color: var(--primary-color);
+  border: 1px solid var(--border-nature);
+}
+
+.badge.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge.cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.badge.open {
+  background-color: #bee3f8;
+  color: #2c5282;
+}
+
