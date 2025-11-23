@@ -147,6 +147,11 @@ export async function initDatabase() {
   } catch (e: any) {
     // Column already exists, ignore
   }
+  try {
+    await dbRun(`ALTER TABLE location_tags ADD COLUMN image_url TEXT`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
 
   // Remove unused associated_map_id column if it exists (SQLite 3.35.0+)
   try {

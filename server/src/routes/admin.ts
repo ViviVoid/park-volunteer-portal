@@ -71,6 +71,39 @@ const upload = multer({
   }
 });
 
+// Configure multer for location tag image uploads
+const locationTagUploadsDir = path.join(__dirname, '../../uploads/location-tags');
+if (!fs.existsSync(locationTagUploadsDir)) {
+  fs.mkdirSync(locationTagUploadsDir, { recursive: true });
+}
+
+const locationTagStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, locationTagUploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'location-tag-' + uniqueSuffix + ext);
+  }
+});
+
+const locationTagUpload = multer({
+  storage: locationTagStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .jpg, .jpeg, .png, and .webp files are allowed'));
+    }
+  }
+});
+
 // Location Tags Management
 router.get('/location-tags', async (req, res) => {
   try {
@@ -91,7 +124,7 @@ router.get('/location-tags', async (req, res) => {
   }
 });
 
-router.post('/location-tags', [
+router.post('/location-tags', locationTagUpload.single('image'), [
   body('name').trim().notEmpty(),
   body('description').optional({ nullable: true, checkFalsy: true }).trim(),
   body('map_point').optional({ nullable: true, checkFalsy: true }),
@@ -135,9 +168,10 @@ router.post('/location-tags', [
     const colorValue = color && color.trim() && /^#[0-9A-Fa-f]{6}$/.test(color.trim()) ? color.trim() : null;
     
     const mapIdValue = map_id ? parseInt(map_id) : null;
+    const imageUrl = req.file ? `/uploads/location-tags/${req.file.filename}` : null;
     
     const result = await dbRun(
-      'INSERT INTO location_tags (name, description, map_point, map_polygon, category, visible, color, map_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO location_tags (name, description, map_point, map_polygon, category, visible, color, map_id, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         name.trim(),
         description && description.trim() ? description.trim() : null,
@@ -146,7 +180,8 @@ router.post('/location-tags', [
         categoryValue,
         visibleValue,
         colorValue,
-        mapIdValue
+        mapIdValue,
+        imageUrl
       ]
     );
 
@@ -162,7 +197,7 @@ router.post('/location-tags', [
   }
 });
 
-router.put('/location-tags/:id', [
+router.put('/location-tags/:id', locationTagUpload.single('image'), [
   body('name').optional().trim().notEmpty(),
   body('description').optional({ nullable: true, checkFalsy: true }).trim(),
   body('map_point').optional({ nullable: true, checkFalsy: true }),
@@ -239,6 +274,31 @@ router.put('/location-tags/:id', [
     if (req.body.map_id !== undefined) {
       updates.push('map_id = ?');
       values.push(req.body.map_id ? parseInt(req.body.map_id) : null);
+    }
+    
+    // Handle image upload
+    if (req.file) {
+      // Get old file to delete it
+      const oldTag = await dbGet('SELECT image_url FROM location_tags WHERE id = ?', [id]);
+      if (oldTag && oldTag.image_url) {
+        const oldFilePath = path.join(__dirname, '../../', oldTag.image_url);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+      updates.push('image_url = ?');
+      values.push(`/uploads/location-tags/${req.file.filename}`);
+    } else if (req.body.remove_image === 'true') {
+      // Handle image removal
+      const oldTag = await dbGet('SELECT image_url FROM location_tags WHERE id = ?', [id]);
+      if (oldTag && oldTag.image_url) {
+        const oldFilePath = path.join(__dirname, '../../', oldTag.image_url);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+      updates.push('image_url = ?');
+      values.push(null);
     }
 
     if (updates.length === 0) {

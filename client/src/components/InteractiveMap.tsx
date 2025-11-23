@@ -27,6 +27,7 @@ interface LocationTag {
   visible?: number | boolean; // 1/0 or true/false
   color?: string; // Hex color code
   map_id?: number; // ID of the map this tag belongs to
+  image_url?: string; // URL to the uploaded image
 }
 
 interface InteractiveMapProps {
@@ -453,20 +454,29 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
           const borderColor = isSelected ? '#2d5016' : tagColor;
           const fillColor = tagColor;
 
-          // Create custom icon with color
-          const createColoredIcon = (color: string) => {
+          // Create custom icon with color and optional image - circular icon with border matching the point's color
+          // If image exists, superimpose it on the circular marker
+          const createColoredIcon = (color: string, imageUrl?: string) => {
+            const markerSize = 32;
+            const borderWidth = 3;
+            const imageSize = markerSize - borderWidth * 2;
+            const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+            
+            let innerHtml = '';
+            if (imageUrl) {
+              const fullImageUrl = imageUrl.startsWith('http') ? imageUrl : `${API_BASE}${imageUrl}`;
+              // Use encodeURIComponent for URL safety in HTML attribute
+              const safeUrl = encodeURI(fullImageUrl);
+              innerHtml = `<img src="${safeUrl}" alt="" style="width:${imageSize}px;height:${imageSize}px;border-radius:50%;object-fit:cover;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';" /><div style="width:${imageSize}px;height:${imageSize}px;background-color:${color};border-radius:50%;display:none;"></div>`;
+            } else {
+              innerHtml = `<div style="width:${imageSize}px;height:${imageSize}px;background-color:${color};border-radius:50%;"></div>`;
+            }
+            
             return L.divIcon({
               className: 'custom-marker',
-              html: `<div style="
-                width: 20px;
-                height: 20px;
-                background-color: ${color};
-                border: 3px solid white;
-                border-radius: 50%;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-              "></div>`,
-              iconSize: [20, 20],
-              iconAnchor: [10, 10],
+              html: `<div style="width:${markerSize}px;height:${markerSize}px;background-color:white;border:${borderWidth}px solid ${color};border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4),0 0 0 2px rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">${innerHtml}</div>`,
+              iconSize: [markerSize, markerSize],
+              iconAnchor: [markerSize / 2, markerSize / 2],
             });
           };
 
@@ -475,7 +485,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
               {markerPosition && (
                 <Marker
                   position={markerPosition}
-                  icon={createColoredIcon(tagColor)}
+                  icon={createColoredIcon(tagColor, tag.image_url)}
                   eventHandlers={{
                     click: () => onTagSelect?.(tag),
                   }}

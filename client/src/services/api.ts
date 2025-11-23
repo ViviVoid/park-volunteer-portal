@@ -78,8 +78,22 @@ export const adminAPI = {
     const params = mapId ? { params: { map_id: mapId } } : {};
     return api.get('/admin/location-tags', params);
   },
-  createLocationTag: (data: any) => api.post('/admin/location-tags', data),
-  updateLocationTag: (id: number, data: any) => api.put(`/admin/location-tags/${id}`, data),
+  createLocationTag: (data: FormData | any) => {
+    if (data instanceof FormData) {
+      return api.post('/admin/location-tags', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    }
+    return api.post('/admin/location-tags', data);
+  },
+  updateLocationTag: (id: number, data: FormData | any) => {
+    if (data instanceof FormData) {
+      return api.put(`/admin/location-tags/${id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    }
+    return api.put(`/admin/location-tags/${id}`, data);
+  },
   deleteLocationTag: (id: number) => api.delete(`/admin/location-tags/${id}`),
   // Maps
   getMaps: () => api.get('/admin/maps'),

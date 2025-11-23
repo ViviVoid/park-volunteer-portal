@@ -160,6 +160,17 @@ const VisitorMap: React.FC = () => {
                     Close
                   </button>
                 </div>
+                {selectedTag.image_url && selectedTag.map_point && (
+                  <div className="visitor-map-sidebar-footer">
+                    <img
+                      src={selectedTag.image_url.startsWith('http') 
+                        ? selectedTag.image_url 
+                        : `${API_URL}${selectedTag.image_url}`}
+                      alt={selectedTag.name}
+                      className="visitor-map-sidebar-image"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>

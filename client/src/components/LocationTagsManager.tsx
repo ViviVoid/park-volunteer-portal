@@ -26,8 +26,11 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     map_polygon: '', 
     category: '', 
     visible: true, 
-    color: '#4a7c2a'
+    color: '#4a7c2a',
+    image_url: ''
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [selectedTag, setSelectedTag] = useState<LocationTag | null>(null);
   const [editingMode, setEditingMode] = useState<'point' | 'polygon' | 'circle' | 'none'>('none');
@@ -392,20 +395,44 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     e.preventDefault();
     setSubmitting(true);
     try {
-      const submitData: any = {
-        name: formData.name,
-        description: formData.description || null,
-        category: formData.category || null,
-        visible: formData.visible,
-        color: formData.color || null,
-        map_id: selectedMapId,
-      };
+      const hasImage = imageFile !== null;
+      let submitData: FormData | any;
       
-      if (formData.map_point) {
-        submitData.map_point = formData.map_point;
-      }
-      if (formData.map_polygon) {
-        submitData.map_polygon = formData.map_polygon;
+      if (hasImage) {
+        // Use FormData if there's an image
+        submitData = new FormData();
+        submitData.append('name', formData.name);
+        submitData.append('description', formData.description || '');
+        submitData.append('category', formData.category || '');
+        submitData.append('visible', formData.visible ? 'true' : 'false');
+        submitData.append('color', formData.color || '');
+        if (selectedMapId) {
+          submitData.append('map_id', selectedMapId.toString());
+        }
+        if (formData.map_point) {
+          submitData.append('map_point', formData.map_point);
+        }
+        if (formData.map_polygon) {
+          submitData.append('map_polygon', formData.map_polygon);
+        }
+        submitData.append('image', imageFile);
+      } else {
+        // Use regular object if no image
+        submitData = {
+          name: formData.name,
+          description: formData.description || null,
+          category: formData.category || null,
+          visible: formData.visible,
+          color: formData.color || null,
+          map_id: selectedMapId,
+        };
+        
+        if (formData.map_point) {
+          submitData.map_point = formData.map_point;
+        }
+        if (formData.map_polygon) {
+          submitData.map_polygon = formData.map_polygon;
+        }
       }
       
       if (editing) {
@@ -423,7 +450,9 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       }
       setShowForm(false);
       setEditing(null);
-      setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a' });
+      setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a', image_url: '' });
+      setImageFile(null);
+      setImagePreview(null);
       setEditingMode('none');
       setSelectedTag(null);
       if (selectedMapId) {
@@ -446,11 +475,22 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       map_polygon: tag.map_polygon || '',
       category: tag.category || '',
       visible: tag.visible !== undefined ? (typeof tag.visible === 'boolean' ? tag.visible : tag.visible === 1) : true,
-      color: tag.color || '#4a7c2a'
+      color: tag.color || '#4a7c2a',
+      image_url: tag.image_url || ''
     });
     setSelectedTag(tag);
     setShowForm(true);
     setEditingMode('none');
+    setImageFile(null);
+    // Set preview if image_url exists
+    if (tag.image_url) {
+      const imageUrl = tag.image_url.startsWith('http') 
+        ? tag.image_url 
+        : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${tag.image_url}`;
+      setImagePreview(imageUrl);
+    } else {
+      setImagePreview(null);
+    }
   };
 
   const handleToggleTagVisibility = async (tagId: number, currentVisible: boolean) => {
@@ -1064,7 +1104,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                       onClick={() => {
                         setShowForm(true);
                         setEditing(null);
-                        setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a' });
+                        setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a', image_url: '' });
                         setSelectedTag(null);
                         setEditingMode('none');
                       }}
@@ -1263,6 +1303,9 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                           setEditing(null);
                           setSelectedTag(null);
                           setEditingMode('none');
+                          setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a', image_url: '' });
+                          setImageFile(null);
+                          setImagePreview(null);
                         }}
                         style={{
                           background: 'none',
@@ -1361,6 +1404,98 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                         </small>
                       </div>
                       <div className="form-group">
+                        <label>Point Image (optional)</label>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setImageFile(file);
+                              // Create preview
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setImagePreview(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            } else {
+                              setImageFile(null);
+                              setImagePreview(formData.image_url ? 
+                                (formData.image_url.startsWith('http') 
+                                  ? formData.image_url 
+                                  : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${formData.image_url}`) 
+                                : null);
+                            }
+                          }}
+                          disabled={submitting}
+                          style={{ width: '100%', padding: '0.5rem' }}
+                        />
+                        <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
+                          Image displayed in footer when point is selected in public view. Markers will show as circular icons with colored borders.
+                        </small>
+                        {(imagePreview || formData.image_url) && (
+                          <div style={{ marginTop: '0.75rem' }}>
+                            <div style={{ 
+                              position: 'relative', 
+                              display: 'inline-block',
+                              maxWidth: '200px'
+                            }}>
+                              <img
+                                src={imagePreview || (formData.image_url?.startsWith('http') 
+                                  ? formData.image_url 
+                                  : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${formData.image_url}`)}
+                                alt="Preview"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '150px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border-color)'
+                                }}
+                              />
+                              {editing && formData.image_url && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const formDataToSend = new FormData();
+                                      formDataToSend.append('remove_image', 'true');
+                                      await adminAPI.updateLocationTag(editing.id, formDataToSend);
+                                      setFormData({ ...formData, image_url: '' });
+                                      setImagePreview(null);
+                                      showToast('Image removed', 'success');
+                                      if (selectedMapId) {
+                                        loadTagsForMap(selectedMapId);
+                                      }
+                                    } catch (error: any) {
+                                      showToast('Failed to remove image', 'error');
+                                    }
+                                  }}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '4px',
+                                    right: '4px',
+                                    background: 'rgba(255, 0, 0, 0.8)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '50%',
+                                    width: '24px',
+                                    height: '24px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}
+                                  title="Remove image"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="form-group">
                         <label>Map Location</label>
                         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                           {formData.map_point ? (
@@ -1453,6 +1588,9 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                             setEditing(null);
                             setSelectedTag(null);
                             setEditingMode('none');
+                            setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a', image_url: '' });
+                            setImageFile(null);
+                            setImagePreview(null);
                           }}
                           className="btn-secondary"
                           disabled={submitting}
