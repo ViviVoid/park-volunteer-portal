@@ -3,16 +3,63 @@ import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth
 import { dbGet, dbAll, dbRun } from '../database';
 import { body, validationResult } from 'express-validator';
 import { notifyVolunteers } from '../services/notifications';
+import { salesforceService } from '../services/salesforce';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 router.use(requireAdmin);
 
+// Configure multer for file uploads
+const uploadsDir = path.join(__dirname, '../../uploads/maps');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'map-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .jpg, .jpeg, .png, and .webp files are allowed'));
+    }
+  }
+});
+
 // Location Tags Management
 router.get('/location-tags', async (req, res) => {
   try {
-    const tags = await dbAll('SELECT * FROM location_tags ORDER BY name ASC');
+    const mapId = req.query.map_id;
+    let query = 'SELECT * FROM location_tags';
+    const params: any[] = [];
+    
+    if (mapId) {
+      query += ' WHERE map_id = ?';
+      params.push(mapId);
+    }
+    
+    query += ' ORDER BY name ASC';
+    const tags = await dbAll(query, params);
     res.json(tags);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -34,7 +81,7 @@ router.post('/location-tags', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, description, map_point, map_polygon, category, visible, color } = req.body;
+    const { name, description, map_point, map_polygon, category, visible, color, map_id } = req.body;
     
     // Validate JSON strings if provided
     let mapPointValue = null;
@@ -62,8 +109,10 @@ router.post('/location-tags', [
     const categoryValue = category && category.trim() ? category.trim() : null;
     const colorValue = color && color.trim() && /^#[0-9A-Fa-f]{6}$/.test(color.trim()) ? color.trim() : null;
     
+    const mapIdValue = map_id ? parseInt(map_id) : null;
+    
     const result = await dbRun(
-      'INSERT INTO location_tags (name, description, map_point, map_polygon, category, visible, color) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO location_tags (name, description, map_point, map_polygon, category, visible, color, map_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         name.trim(),
         description && description.trim() ? description.trim() : null,
@@ -71,7 +120,8 @@ router.post('/location-tags', [
         mapPolygonValue,
         categoryValue,
         visibleValue,
-        colorValue
+        colorValue,
+        mapIdValue
       ]
     );
 
@@ -161,6 +211,10 @@ router.put('/location-tags/:id', [
         values.push(null);
       }
     }
+    if (req.body.map_id !== undefined) {
+      updates.push('map_id = ?');
+      values.push(req.body.map_id ? parseInt(req.body.map_id) : null);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -209,6 +263,180 @@ router.delete('/location-tags/:id', async (req, res) => {
   } catch (error: any) {
     console.error('Error deleting location tag:', error);
     res.status(500).json({ error: error.message || 'Failed to delete location tag' });
+  }
+});
+
+// Maps Management
+router.get('/maps', async (req, res) => {
+  try {
+    const maps = await dbAll('SELECT * FROM maps ORDER BY is_default DESC, name ASC');
+    res.json(maps);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/maps', upload.single('image'), [
+  body('name').trim().notEmpty(),
+  body('is_default').optional().isBoolean().toBoolean(),
+  body('image_bounds').optional(),
+  body('parent_map_id').optional().isInt().toInt(),
+  body('crop_bounds').optional()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required' });
+    }
+
+    const { name, is_default, image_bounds, parent_map_id, crop_bounds } = req.body;
+    const imageUrl = `/uploads/maps/${req.file.filename}`;
+
+    // If this is set as default, unset all other defaults
+    if (is_default) {
+      await dbRun('UPDATE maps SET is_default = 0');
+    }
+
+    // Validate image_bounds JSON if provided
+    let imageBoundsValue = null;
+    if (image_bounds) {
+      try {
+        JSON.parse(image_bounds);
+        imageBoundsValue = image_bounds;
+      } catch (e) {
+        return res.status(400).json({ error: 'Invalid image_bounds JSON format' });
+      }
+    }
+
+    // Validate crop_bounds JSON if provided
+    let cropBoundsValue = null;
+    if (crop_bounds) {
+      try {
+        JSON.parse(crop_bounds);
+        cropBoundsValue = crop_bounds;
+      } catch (e) {
+        return res.status(400).json({ error: 'Invalid crop_bounds JSON format' });
+      }
+    }
+
+    const isDefaultValue = is_default ? 1 : 0;
+    const parentMapIdValue = parent_map_id ? parseInt(parent_map_id) : null;
+
+    const result = await dbRun(
+      'INSERT INTO maps (name, image_url, image_bounds, is_default, parent_map_id, crop_bounds) VALUES (?, ?, ?, ?, ?, ?)',
+      [name.trim(), imageUrl, imageBoundsValue, isDefaultValue, parentMapIdValue, cropBoundsValue]
+    );
+
+    const map = await dbGet('SELECT * FROM maps WHERE id = ?', [result.lastID]);
+    res.json(map);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/maps/:id', upload.single('image'), [
+  body('name').optional().trim().notEmpty(),
+  body('is_default').optional().isBoolean().toBoolean(),
+  body('image_bounds').optional()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { name, is_default, image_bounds } = req.body;
+
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name.trim());
+    }
+
+    if (req.file) {
+      // Get old file to delete it
+      const oldMap = await dbGet('SELECT image_url FROM maps WHERE id = ?', [id]);
+      if (oldMap && oldMap.image_url) {
+        const oldFilePath = path.join(__dirname, '../../', oldMap.image_url);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+      updates.push('image_url = ?');
+      values.push(`/uploads/maps/${req.file.filename}`);
+    }
+
+    if (image_bounds !== undefined) {
+      if (image_bounds) {
+        try {
+          JSON.parse(image_bounds);
+          updates.push('image_bounds = ?');
+          values.push(image_bounds);
+        } catch (e) {
+          return res.status(400).json({ error: 'Invalid image_bounds JSON format' });
+        }
+      } else {
+        updates.push('image_bounds = ?');
+        values.push(null);
+      }
+    }
+
+    if (is_default !== undefined) {
+      // If setting as default, unset all other defaults
+      if (is_default) {
+        await dbRun('UPDATE maps SET is_default = 0');
+      }
+      updates.push('is_default = ?');
+      values.push(is_default ? 1 : 0);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(id);
+    await dbRun(
+      `UPDATE maps SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    const map = await dbGet('SELECT * FROM maps WHERE id = ?', [id]);
+    res.json(map);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/maps/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if there are location tags using this map
+    const tags = await dbAll('SELECT COUNT(*) as count FROM location_tags WHERE map_id = ?', [id]);
+    if (tags[0].count > 0) {
+      return res.status(400).json({ error: 'Cannot delete map that has associated location tags' });
+    }
+
+    // Get map to delete image file
+    const map = await dbGet('SELECT image_url FROM maps WHERE id = ?', [id]);
+    if (map && map.image_url) {
+      const filePath = path.join(__dirname, '../../', map.image_url);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    await dbRun('DELETE FROM maps WHERE id = ?', [id]);
+    res.json({ message: 'Map deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -766,6 +994,301 @@ router.patch('/scheduled-posts/:id/toggle', async (req, res) => {
     res.status(500).json({ error: error.message || 'Failed to create template' });
   }
 });
+
+// Delete scheduled post
+router.delete('/scheduled-posts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const scheduled: any = await dbGet('SELECT * FROM scheduled_posts WHERE id = ?', [id]);
+    if (!scheduled) {
+      return res.status(404).json({ error: 'Scheduled post not found' });
+    }
+
+    await dbRun('DELETE FROM scheduled_posts WHERE id = ?', [id]);
+    res.json({ message: 'Scheduled post deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting scheduled post:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete scheduled post' });
+  }
+});
+
+// Salesforce Integration Routes
+
+// Connect to Salesforce (mock - for MVP demonstration)
+router.post('/salesforce/connect', [
+  body('api_key').notEmpty().withMessage('API key is required')
+], async (req: AuthRequest, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { api_key } = req.body;
+    const connected = await salesforceService.connect(api_key);
+    
+    if (connected) {
+      // Sync existing volunteers to Salesforce
+      const volunteers: any[] = await dbAll(
+        'SELECT id, email, phone, name, notification_preference FROM users WHERE role = ?',
+        ['volunteer']
+      );
+      await salesforceService.syncContacts(volunteers);
+      
+      res.json({ 
+        success: true, 
+        message: 'Connected to Salesforce (Mock Mode)',
+        contactsSynced: volunteers.length,
+        note: 'This is a mock implementation for MVP demonstration'
+      });
+    } else {
+      res.status(400).json({ error: 'Failed to connect to Salesforce' });
+    }
+  } catch (error: any) {
+    console.error('Error connecting to Salesforce:', error);
+    res.status(500).json({ error: error.message || 'Failed to connect to Salesforce' });
+  }
+});
+
+// Get Salesforce connection status
+router.get('/salesforce/status', async (req: AuthRequest, res) => {
+  try {
+    const isConnected = salesforceService.isApiConnected();
+    const contactCount = await salesforceService.getContactCount();
+    const campaigns = await salesforceService.getAllCampaigns();
+    
+    res.json({
+      connected: isConnected,
+      contactCount,
+      campaignCount: campaigns.length,
+      note: isConnected ? 'Mock Salesforce integration active' : 'Not connected'
+    });
+  } catch (error: any) {
+    console.error('Error getting Salesforce status:', error);
+    res.status(500).json({ error: error.message || 'Failed to get Salesforce status' });
+  }
+});
+
+// Organization Announcements Routes
+
+// Get all announcements
+router.get('/announcements', async (req: AuthRequest, res) => {
+  try {
+    const announcements = await dbAll(`
+      SELECT a.*, u.name as created_by_name
+      FROM organization_announcements a
+      LEFT JOIN users u ON a.created_by = u.id
+      ORDER BY a.created_at DESC
+    `);
+    res.json(announcements);
+  } catch (error: any) {
+    console.error('Error fetching announcements:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch announcements' });
+  }
+});
+
+// Create announcement
+router.post('/announcements', [
+  body('title').notEmpty().withMessage('Title is required'),
+  body('description').notEmpty().withMessage('Description is required'),
+  body('type').isIn(['email', 'sms', 'both']).withMessage('Type must be email, sms, or both'),
+  body('link').optional().isURL().withMessage('Link must be a valid URL'),
+  body('cron_expression').optional()
+], async (req: AuthRequest, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { title, description, link, type, cron_expression } = req.body;
+    
+    // Calculate next_send_at if cron expression provided
+    let next_send_at = null;
+    if (cron_expression) {
+      // Simple calculation - in production, use a proper cron parser
+      const now = new Date();
+      next_send_at = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(); // Default to tomorrow
+    }
+
+    const result: any = await dbRun(
+      `INSERT INTO organization_announcements (title, description, link, type, cron_expression, next_send_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [title, description, link || null, type, cron_expression || null, next_send_at, req.userId]
+    );
+
+    const announcement = await dbGet(
+      'SELECT a.*, u.name as created_by_name FROM organization_announcements a LEFT JOIN users u ON a.created_by = u.id WHERE a.id = ?',
+      [result.lastID]
+    );
+
+    // If no cron expression, send immediately
+    if (!cron_expression) {
+      await sendAnnouncement(announcement);
+    }
+
+    res.status(201).json(announcement);
+  } catch (error: any) {
+    console.error('Error creating announcement:', error);
+    res.status(500).json({ error: error.message || 'Failed to create announcement' });
+  }
+});
+
+// Send announcement immediately
+router.post('/announcements/:id/send', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const announcement: any = await dbGet(
+      'SELECT a.*, u.name as created_by_name FROM organization_announcements a LEFT JOIN users u ON a.created_by = u.id WHERE a.id = ?',
+      [id]
+    );
+
+    if (!announcement) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+
+    await sendAnnouncement(announcement);
+    
+    // Update last_sent_at
+    await dbRun(
+      'UPDATE organization_announcements SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [id]
+    );
+
+    res.json({ message: 'Announcement sent successfully' });
+  } catch (error: any) {
+    console.error('Error sending announcement:', error);
+    res.status(500).json({ error: error.message || 'Failed to send announcement' });
+  }
+});
+
+// Toggle announcement active status
+router.patch('/announcements/:id/toggle', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const announcement: any = await dbGet('SELECT * FROM organization_announcements WHERE id = ?', [id]);
+    if (!announcement) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+
+    await dbRun(
+      'UPDATE organization_announcements SET is_active = ? WHERE id = ?',
+      [announcement.is_active ? 0 : 1, id]
+    );
+
+    res.json({ message: 'Status updated' });
+  } catch (error: any) {
+    console.error('Error toggling announcement:', error);
+    res.status(500).json({ error: error.message || 'Failed to update announcement' });
+  }
+});
+
+// Delete announcement
+router.delete('/announcements/:id', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const announcement: any = await dbGet('SELECT * FROM organization_announcements WHERE id = ?', [id]);
+    if (!announcement) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+
+    await dbRun('DELETE FROM organization_announcements WHERE id = ?', [id]);
+    res.json({ message: 'Announcement deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting announcement:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete announcement' });
+  }
+});
+
+// Helper function to send announcement
+async function sendAnnouncement(announcement: any) {
+  const volunteers: any[] = await dbAll(
+    'SELECT id, email, phone, name, notification_preference FROM users WHERE role = ?',
+    ['volunteer']
+  );
+
+  const description = announcement.description || announcement.message || ''; // Support both for migration
+  const linkText = announcement.link ? `\n\nView document: ${announcement.link}` : '';
+  const linkHtml = announcement.link ? `<p style="margin-top: 1rem;"><a href="${announcement.link}" style="color: var(--primary-color); text-decoration: none; font-weight: bold;">View Document →</a></p>` : '';
+
+  // Use Salesforce if connected, otherwise use direct notifications
+  if (salesforceService.isApiConnected()) {
+    try {
+      if (announcement.type === 'email' || announcement.type === 'both') {
+        await salesforceService.createEmailCampaign({
+          name: announcement.title,
+          subject: announcement.title,
+          message: description + linkText,
+        });
+      }
+      if (announcement.type === 'sms' || announcement.type === 'both') {
+        await salesforceService.createSMSCampaign({
+          name: announcement.title,
+          message: `${announcement.title}\n\n${description}${linkText}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error sending via Salesforce, falling back to direct notifications:', error);
+      // Fall through to direct notifications
+    }
+  }
+
+  // Send via direct notifications (existing system)
+  for (const volunteer of volunteers) {
+    const pref = volunteer.notification_preference || 'email';
+
+    if ((announcement.type === 'email' || announcement.type === 'both') && (pref === 'email' || pref === 'both')) {
+      if (volunteer.email) {
+        try {
+          const emailTransporter = require('nodemailer').createTransport({
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
+            port: parseInt(process.env.SMTP_PORT || '587'),
+            secure: false,
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS
+            }
+          });
+
+          await emailTransporter.sendMail({
+            from: process.env.SMTP_FROM || 'noreply@park.local',
+            to: volunteer.email,
+            subject: announcement.title,
+            text: description + linkText,
+            html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>${announcement.title}</h2>
+              <div style="white-space: pre-wrap; line-height: 1.6;">${description}</div>
+              ${linkHtml}
+            </div>`
+          });
+        } catch (error) {
+          console.error(`Failed to send email to ${volunteer.email}:`, error);
+        }
+      }
+    }
+
+    if ((announcement.type === 'sms' || announcement.type === 'both') && (pref === 'phone' || pref === 'both')) {
+      if (volunteer.phone) {
+        try {
+          const twilio = require('twilio');
+          const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+            ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+            : null;
+
+          if (twilioClient) {
+            await twilioClient.messages.create({
+              body: `${announcement.title}\n\n${description}${linkText}`,
+              from: process.env.TWILIO_PHONE_NUMBER,
+              to: volunteer.phone
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to send SMS to ${volunteer.phone}:`, error);
+        }
+      }
+    }
+  }
+}
 
 export default router;
 
