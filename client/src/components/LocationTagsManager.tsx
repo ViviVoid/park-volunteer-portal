@@ -6,15 +6,15 @@ import InteractiveMap, { LocationTag, MapPoint } from './InteractiveMap';
 import '../pages/Dashboard.css';
 
 interface LocationTagsManagerProps {
-  onClose: () => void;
-  locationTags: any[];
-  onTagsUpdate: () => void;
+  onClose?: () => void;
+  locationTags?: any[];
+  onTagsUpdate?: () => void;
 }
 
 const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({ 
   onClose, 
-  locationTags, 
-  onTagsUpdate 
+  locationTags = [], 
+  onTagsUpdate
 }) => {
   const [tags, setTags] = useState<any[]>(locationTags);
   const [showForm, setShowForm] = useState(false);
@@ -26,7 +26,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     map_polygon: '', 
     category: '', 
     visible: true, 
-    color: '#4a7c2a' 
+    color: '#4a7c2a'
   });
   const [submitting, setSubmitting] = useState(false);
   const [selectedTag, setSelectedTag] = useState<LocationTag | null>(null);
@@ -39,6 +39,11 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
   const [imageBounds, setImageBounds] = useState<[[number, number], [number, number]]>([[0, 0], [1000, 1000]]);
   const [showVisibilityMenu, setShowVisibilityMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [maps, setMaps] = useState<any[]>([]);
+  const [selectedMapId, setSelectedMapId] = useState<number | null>(null);
+  const [currentMap, setCurrentMap] = useState<any>(null);
+  const [showMapForm, setShowMapForm] = useState(false);
+  const [mapFormData, setMapFormData] = useState({ name: '', is_default: false });
   const { toasts, showToast, removeToast } = useToast();
   const tagRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const visibilityMenuRef = useRef<HTMLDivElement | null>(null);
@@ -57,29 +62,258 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [sidebarCollapsed]);
 
-  // Load image and calculate proper bounds based on actual image dimensions
+  // Load maps on mount
   useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      // Set bounds to match actual image dimensions
-      // Leaflet uses [[south, west], [north, east]] format
-      // For images, we use [[0, 0], [height, width]]
-      const height = img.naturalHeight;
-      const width = img.naturalWidth;
-      setImageBounds([[0, 0], [height, width]]);
-    };
-    img.onerror = () => {
-      console.warn('Failed to load map image, using default bounds');
-      // Keep default bounds if image fails to load
-    };
-    img.src = '/domes-facility-map.webp';
+    loadMaps();
   }, []);
 
+  // Load tags when map changes
   useEffect(() => {
-    setTags(locationTags);
+    if (selectedMapId !== null) {
+      loadTagsForMap(selectedMapId);
+    } else {
+      setTags([]);
+    }
+  }, [selectedMapId]);
+
+  // Load image and calculate proper bounds when map changes
+  useEffect(() => {
+    if (currentMap && currentMap.image_url) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous'; // Allow CORS if needed
+      img.onload = () => {
+        const height = img.naturalHeight;
+        const width = img.naturalWidth;
+        setImageBounds([[0, 0], [height, width]]);
+      };
+      img.onerror = (e) => {
+        console.warn('Failed to load map image:', currentMap.image_url, e);
+      };
+      // Construct full URL for the image
+      const imageUrl = currentMap.image_url.startsWith('http') 
+        ? currentMap.image_url 
+        : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${currentMap.image_url}`;
+      console.log('Loading map image from:', imageUrl);
+      img.src = imageUrl;
+    }
+  }, [currentMap]);
+
+  const loadMaps = async () => {
+    try {
+      const response = await adminAPI.getMaps();
+      const mapsData = response.data;
+      setMaps(mapsData);
+      
+      // Set default map or first map
+      const defaultMap = mapsData.find((m: any) => m.is_default === 1) || mapsData[0];
+      if (defaultMap) {
+        setSelectedMapId(defaultMap.id);
+        setCurrentMap(defaultMap);
+      } else {
+        // No maps available
+        setSelectedMapId(null);
+        setCurrentMap(null);
+      }
+    } catch (error: any) {
+      console.error('Failed to load maps:', error);
+      showToast('Failed to load maps', 'error');
+      setMaps([]);
+      setSelectedMapId(null);
+      setCurrentMap(null);
+    }
+  };
+
+  const loadTagsForMap = async (mapId: number) => {
+    try {
+      const response = await adminAPI.getLocationTags(mapId);
+      setTags(response.data);
+      onTagsUpdate?.();
+    } catch (error: any) {
+      showToast('Failed to load location tags', 'error');
+      setTags([]);
+    }
+  };
+
+  const handleMapChange = (mapId: number | null) => {
+    setSelectedMapId(mapId);
+    const map = maps.find(m => m.id === mapId);
+    setCurrentMap(map || null);
+    setSelectedTag(null);
+    setEditing(null);
+    setShowForm(false);
+    setEditingMode('none');
+  };
+
+  const handleCreateMap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('name', mapFormData.name);
+    formData.append('is_default', mapFormData.is_default ? 'true' : 'false');
+    
+    const fileInput = document.getElementById('map-image-input') as HTMLInputElement;
+    if (!fileInput?.files?.[0]) {
+      showToast('Please select an image file', 'error');
+      return;
+    }
+    formData.append('image', fileInput.files[0]);
+
+    try {
+      await adminAPI.createMap(formData);
+      showToast('Map created successfully', 'success');
+      setShowMapForm(false);
+      setMapFormData({ name: '', is_default: false });
+      loadMaps();
+    } catch (error: any) {
+      showToast(error.response?.data?.error || 'Failed to create map', 'error');
+    }
+  };
+
+  // Create a new map from a selected polygon/circle area
+  const handleCreateMapFromArea = async () => {
+    if (!currentMap || !currentMap.image_url) {
+      showToast('No map image available', 'error');
+      return;
+    }
+
+    const polygon = formData.map_polygon ? JSON.parse(formData.map_polygon) : null;
+    if (!polygon || polygon.length === 0) {
+      showToast('Please select a polygon or circle area first', 'error');
+      return;
+    }
+
+    // Get bounds of the polygon
+    const xs = polygon.map((p: MapPoint) => p.x);
+    const ys = polygon.map((p: MapPoint) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    // Calculate pixel bounds from normalized coordinates
+    const [[south, west], [north, east]] = imageBounds;
+    const width = east - west;
+    const height = north - south;
+    
+    const pixelMinX = minX * width;
+    const pixelMaxX = maxX * width;
+    const pixelMinY = minY * height;
+    const pixelMaxY = maxY * height;
+    
+    const cropWidth = pixelMaxX - pixelMinX;
+    const cropHeight = pixelMaxY - pixelMinY;
+
+    try {
+      // Load the image
+      const imageUrl = currentMap.image_url.startsWith('http') 
+        ? currentMap.image_url 
+        : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${currentMap.image_url}`;
+      
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+
+      // Create canvas and crop
+      const canvas = document.createElement('canvas');
+      canvas.width = cropWidth;
+      canvas.height = cropHeight;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        showToast('Failed to create canvas', 'error');
+        return;
+      }
+
+      // Draw the cropped portion
+      ctx.drawImage(
+        img,
+        pixelMinX, pixelMinY, cropWidth, cropHeight,
+        0, 0, cropWidth, cropHeight
+      );
+
+      // Convert canvas to blob
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          showToast('Failed to crop image', 'error');
+          return;
+        }
+
+        // Prompt for map name
+        const mapName = prompt('Enter a name for the new map:');
+        if (!mapName || !mapName.trim()) {
+          return;
+        }
+
+        // Create FormData and upload
+        const formData = new FormData();
+        formData.append('name', mapName.trim());
+        formData.append('is_default', 'false');
+        formData.append('image', blob, `${mapName.replace(/\s+/g, '-').toLowerCase()}.png`);
+        formData.append('parent_map_id', currentMap.id.toString());
+        formData.append('crop_bounds', JSON.stringify({ minX, maxX, minY, maxY }));
+
+        try {
+          await adminAPI.createMap(formData);
+          showToast('Map created from selected area successfully!', 'success');
+          loadMaps();
+        } catch (error: any) {
+          showToast(error.response?.data?.error || 'Failed to create map', 'error');
+        }
+      }, 'image/png');
+    } catch (error: any) {
+      console.error('Error creating map from area:', error);
+      showToast('Failed to create map from area', 'error');
+    }
+  };
+
+  const handleUpdateMapDefault = async (mapId: number, isDefault: boolean) => {
+    try {
+      const formData = new FormData();
+      formData.append('is_default', isDefault ? 'true' : 'false');
+      await adminAPI.updateMap(mapId, formData);
+      showToast('Map updated successfully', 'success');
+      loadMaps();
+    } catch (error: any) {
+      showToast('Failed to update map', 'error');
+    }
+  };
+
+  const handleDeleteMap = async (mapId: number) => {
+    if (!window.confirm('Are you sure you want to delete this map? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await adminAPI.deleteMap(mapId);
+      showToast('Map deleted successfully', 'success');
+      
+      // If the deleted map was selected, switch to another map
+      if (selectedMapId === mapId) {
+        const remainingMaps = maps.filter(m => m.id !== mapId);
+        if (remainingMaps.length > 0) {
+          const defaultMap = remainingMaps.find((m: any) => m.is_default === 1) || remainingMaps[0];
+          setSelectedMapId(defaultMap.id);
+          setCurrentMap(defaultMap);
+        } else {
+          setSelectedMapId(null);
+          setCurrentMap(null);
+        }
+      }
+      
+      loadMaps();
+    } catch (error: any) {
+      showToast(error.response?.data?.error || 'Failed to delete map', 'error');
+    }
+  };
+
+  useEffect(() => {
     // Extract unique categories
     const uniqueCategories = Array.from(new Set(
-      locationTags
+      tags
         .map(t => t.category)
         .filter((c): c is string => c !== undefined && c !== null && c !== '')
     )).sort();
@@ -94,7 +328,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       allCategories.add('Uncategorized');
       setExpandedCategories(allCategories);
     }
-  }, [locationTags]);
+  }, [tags]);
 
   // Scroll to and highlight selected tag when it changes (e.g., from map click)
   useEffect(() => {
@@ -150,6 +384,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
         category: formData.category || null,
         visible: formData.visible,
         color: formData.color || null,
+        map_id: selectedMapId,
       };
       
       if (formData.map_point) {
@@ -162,16 +397,25 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       if (editing) {
         await adminAPI.updateLocationTag(editing.id, submitData);
         showToast('Location tag updated successfully!', 'success');
+        if (selectedMapId) {
+          loadTagsForMap(selectedMapId);
+        }
       } else {
         await adminAPI.createLocationTag(submitData);
         showToast('Location tag created successfully!', 'success');
+        if (selectedMapId) {
+          loadTagsForMap(selectedMapId);
+        }
       }
       setShowForm(false);
       setEditing(null);
       setFormData({ name: '', description: '', map_point: '', map_polygon: '', category: '', visible: true, color: '#4a7c2a' });
       setEditingMode('none');
       setSelectedTag(null);
-      onTagsUpdate();
+      if (selectedMapId) {
+        loadTagsForMap(selectedMapId);
+      }
+      onTagsUpdate?.();
     } catch (error: any) {
       showToast(error.response?.data?.error || 'Failed to save location tag', 'error');
     } finally {
@@ -199,7 +443,10 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     try {
       await adminAPI.updateLocationTag(tagId, { visible: !currentVisible });
       showToast('Tag visibility updated', 'success');
-      onTagsUpdate();
+      if (selectedMapId) {
+        loadTagsForMap(selectedMapId);
+      }
+      onTagsUpdate?.();
     } catch (error: any) {
       showToast('Failed to update visibility', 'error');
     }
@@ -246,7 +493,10 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     try {
       await adminAPI.deleteLocationTag(id);
       showToast('Location tag deleted successfully', 'success');
-      onTagsUpdate();
+      if (selectedMapId) {
+        loadTagsForMap(selectedMapId);
+      }
+      onTagsUpdate?.();
     } catch (error: any) {
       showToast(error.response?.data?.error || 'Failed to delete location tag', 'error');
     }
@@ -261,7 +511,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       try {
         await adminAPI.updateLocationTag(tagId, { map_point: mapPointValue });
         setEditing({ ...editing, map_point: mapPointValue });
-        onTagsUpdate();
+        onTagsUpdate?.();
       } catch (error: any) {
         showToast('Failed to save point location', 'error');
       }
@@ -277,7 +527,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
       try {
         await adminAPI.updateLocationTag(tagId, { map_polygon: mapPolygonValue });
         setEditing({ ...editing, map_polygon: mapPolygonValue });
-        onTagsUpdate();
+        onTagsUpdate?.();
       } catch (error: any) {
         showToast('Failed to save polygon area', 'error');
       }
@@ -288,17 +538,25 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
     try {
       await adminAPI.updateLocationTag(tagId, { map_point: null });
       showToast('Point location removed', 'success');
-      onTagsUpdate();
+      onTagsUpdate?.();
       // Update local state
       const updatedTags = tags.map(t => t.id === tagId ? { ...t, map_point: undefined } : t);
       setTags(updatedTags);
+      // Update form data if editing this tag
+      if (editing && editing.id === tagId) {
+        setFormData({ ...formData, map_point: '' });
+        setEditing({ ...editing, map_point: undefined });
+      }
+      if (selectedMapId) {
+        loadTagsForMap(selectedMapId);
+      }
     } catch (error: any) {
       showToast('Failed to remove point location', 'error');
     }
   };
 
   return (
-    <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ padding: 0 }}>
+    <div className="modal" onClick={(e) => { if (e.target === e.currentTarget && onClose) onClose(); }} style={{ padding: 0 }}>
       <div style={{
         position: 'fixed',
         top: 0,
@@ -332,8 +590,66 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
           flexShrink: 0,
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1.5rem' }}>Location Tags Manager</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: '1.5rem' }}>Interactive Map</h3>
+            {/* Map Selection Dropdown */}
+            {maps.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <label style={{ fontSize: '0.9rem', fontWeight: 500 }}>Map:</label>
+                <select
+                  value={selectedMapId || ''}
+                  onChange={(e) => handleMapChange(e.target.value ? parseInt(e.target.value) : null)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    minWidth: '200px'
+                  }}
+                >
+                  {maps.map((map) => (
+                    <option key={map.id} value={map.id}>
+                      {map.name} {map.is_default === 1 ? '⭐' : ''}
+                    </option>
+                  ))}
+                </select>
+                {!isMobile && (
+                  <>
+                    {currentMap && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={currentMap.is_default === 1}
+                          onChange={(e) => handleUpdateMapDefault(currentMap.id, e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        Default
+                      </label>
+                    )}
+                    <button
+                      onClick={() => setShowMapForm(true)}
+                      className="btn-secondary"
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                    >
+                      + New Map
+                    </button>
+                    {currentMap && (
+                      <button
+                        onClick={() => handleDeleteMap(currentMap.id)}
+                        className="btn-danger"
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                        title="Delete current map"
+                      >
+                        🗑️ Delete Map
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             {/* Visibility Filter Menu */}
@@ -503,7 +819,9 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
               )}
             </div>
             
-            <button onClick={onClose} className="btn-secondary" style={{ width: 'auto', padding: '0.5rem 1rem' }}>Close</button>
+            {onClose && (
+              <button onClick={onClose} className="btn-secondary" style={{ width: 'auto', padding: '0.5rem 1rem' }}>Close</button>
+            )}
           </div>
         </div>
 
@@ -519,74 +837,142 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
             minHeight: isMobile ? '50vh' : 'auto'
           }}>
             <div style={{ flex: 1, position: 'relative', minHeight: isMobile ? '50vh' : 'auto' }}>
-              <InteractiveMap
-                locationTags={tags}
-                selectedTag={selectedTag}
-                onTagSelect={(tag) => {
-                  setSelectedTag(tag);
-                  // If sidebar is open and tag is clicked from map, ensure it's visible
-                  if (tag && !sidebarCollapsed) {
-                    handleEdit(tag);
-                  }
-                }}
-                onPointChange={(tagId, point) => {
-                  if (editing && editing.id === tagId) {
-                    handlePointChange(tagId, point);
-                  } else if (showForm && editingMode === 'point') {
-                    // For new tags or when editing mode is active, update form data
-                    const mapPointValue = point ? JSON.stringify(point) : '';
-                    setFormData({ ...formData, map_point: mapPointValue });
-                  }
-                }}
-                onPolygonChange={(tagId, polygon) => {
-                  if (editing && editing.id === tagId) {
-                    handlePolygonChange(tagId, polygon);
-                  } else if (showForm && (editingMode === 'polygon' || editingMode === 'circle')) {
-                    // For new tags or when editing mode is active, update form data
-                    const mapPolygonValue = polygon && polygon.length > 0 ? JSON.stringify(polygon) : '';
-                    setFormData({ ...formData, map_polygon: mapPolygonValue });
-                  }
-                }}
-                editingMode={editingMode}
-                mapImageUrl="/domes-facility-map.webp"
-                imageBounds={imageBounds}
-                allowEditingWithoutTag={showForm && !editing}
-                showTags={showTags}
-                onRemovePoint={handleRemovePoint}
-                visibleCategories={visibleCategories}
-              />
-            {editingMode !== 'none' && (
-              <div style={{
-                position: 'absolute',
-                top: '1rem',
-                left: '1rem',
-                background: 'rgba(255, 255, 255, 0.95)',
-                padding: '1rem',
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                zIndex: 1000,
-                maxWidth: '300px'
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary-color)' }}>
-                  {editingMode === 'point' && '📍 Setting Point Location'}
-                  {editingMode === 'polygon' && '🗺️ Drawing Polygon Area'}
-                  {editingMode === 'circle' && '⭕ Drawing Circle Area'}
+              {!currentMap ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  padding: '2rem',
+                  textAlign: 'center',
+                  color: 'var(--text-secondary)'
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
+                  <h3>No Map Selected</h3>
+                  <p>Please select a map from the dropdown above or create a new map.</p>
+                  {maps.length === 0 && (
+                    <button
+                      onClick={() => setShowMapForm(true)}
+                      className="btn-primary"
+                      style={{ marginTop: '1rem', padding: '0.75rem 1.5rem' }}
+                    >
+                      Create Your First Map
+                    </button>
+                  )}
                 </div>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                  {editingMode === 'point' && 'Click anywhere on the map to set the location point'}
-                  {editingMode === 'polygon' && 'Click on the map to add points to the polygon. Click outside the form to finish.'}
-                  {editingMode === 'circle' && 'Click to set the center, then move your mouse to adjust the radius. Click again to finish.'}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditingMode('none')}
-                  className="btn-secondary"
-                  style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-                >
-                  Cancel Editing
-                </button>
-              </div>
-            )}
+              ) : (
+                <>
+                  <InteractiveMap
+                    locationTags={(() => {
+                      // Include preview tags from form data
+                      const previewTags = [...tags];
+                      
+                      // Add preview tag for new tag being created
+                      if (showForm && !editing && (formData.map_point || formData.map_polygon)) {
+                        previewTags.push({
+                          id: -1, // Temporary ID for preview
+                          name: formData.name || 'New Tag',
+                          description: formData.description,
+                          map_point: formData.map_point || undefined,
+                          map_polygon: formData.map_polygon || undefined,
+                          category: formData.category,
+                          visible: formData.visible,
+                          color: formData.color || '#4a7c2a',
+                          map_id: selectedMapId || undefined
+                        });
+                      }
+                      
+                      // Update preview for tag being edited
+                      if (showForm && editing) {
+                        const index = previewTags.findIndex(t => t.id === editing.id);
+                        if (index >= 0) {
+                          previewTags[index] = {
+                            ...previewTags[index],
+                            map_point: formData.map_point || previewTags[index].map_point,
+                            map_polygon: formData.map_polygon || previewTags[index].map_polygon,
+                            color: formData.color || previewTags[index].color
+                          };
+                        }
+                      }
+                      
+                      return previewTags;
+                    })()}
+                    selectedTag={selectedTag}
+                    onTagSelect={(tag) => {
+                      setSelectedTag(tag);
+                      // If sidebar is open and tag is clicked from map, ensure it's visible
+                      if (tag && !sidebarCollapsed) {
+                        handleEdit(tag);
+                      }
+                    }}
+                    onPointChange={(tagId, point) => {
+                      if (editing && editing.id === tagId) {
+                        handlePointChange(tagId, point);
+                      } else if (showForm && editingMode === 'point') {
+                        // For new tags or when editing mode is active, update form data
+                        const mapPointValue = point ? JSON.stringify(point) : '';
+                        setFormData({ ...formData, map_point: mapPointValue });
+                      }
+                    }}
+                    onPolygonChange={(tagId, polygon) => {
+                      if (editing && editing.id === tagId) {
+                        handlePolygonChange(tagId, polygon);
+                      } else if (showForm && (editingMode === 'polygon' || editingMode === 'circle')) {
+                        // For new tags or when editing mode is active, update form data
+                        const mapPolygonValue = polygon && polygon.length > 0 ? JSON.stringify(polygon) : '';
+                        setFormData({ ...formData, map_polygon: mapPolygonValue });
+                      }
+                    }}
+                    editingMode={editingMode}
+                    mapImageUrl={currentMap?.image_url 
+                      ? (currentMap.image_url.startsWith('http') 
+                          ? currentMap.image_url 
+                          : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${currentMap.image_url}`)
+                      : ''}
+                    imageBounds={currentMap?.image_bounds ? JSON.parse(currentMap.image_bounds) : imageBounds}
+                    allowEditingWithoutTag={showForm}
+                    showTags={showTags}
+                    onRemovePoint={handleRemovePoint}
+                    visibleCategories={visibleCategories}
+                    cropBounds={currentMap?.crop_bounds ? JSON.parse(currentMap.crop_bounds) : null}
+                    currentMapId={currentMap?.id || null}
+                    parentMapId={currentMap?.parent_map_id || null}
+                  />
+                  {editingMode !== 'none' && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      left: '1rem',
+                      background: 'rgba(255, 255, 255, 0.95)',
+                      padding: '1rem',
+                      borderRadius: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      zIndex: 1000,
+                      maxWidth: '300px'
+                    }}>
+                      <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary-color)' }}>
+                        {editingMode === 'point' && '📍 Setting Point Location'}
+                        {editingMode === 'polygon' && '🗺️ Drawing Polygon Area'}
+                        {editingMode === 'circle' && '⭕ Drawing Circle Area'}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                        {editingMode === 'point' && 'Click anywhere on the map to set the location point'}
+                        {editingMode === 'polygon' && 'Click on the map to add points to the polygon. Click outside the form to finish.'}
+                        {editingMode === 'circle' && 'Click to set the center, then move your mouse to adjust the radius. Click again to finish.'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingMode('none')}
+                        className="btn-secondary"
+                        style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                      >
+                        Cancel Editing
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
@@ -952,14 +1338,32 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                       <div className="form-group">
                         <label>Map Location</label>
                         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            onClick={() => setEditingMode(editingMode === 'point' ? 'none' : 'point')}
-                            className={editingMode === 'point' ? 'btn-primary' : 'btn-secondary'}
-                            style={{ width: 'auto', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-                          >
-                            {editingMode === 'point' ? '✓' : ''} Set Point
-                          </button>
+                          {formData.map_point ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (editing) {
+                                  handleRemovePoint(editing.id);
+                                } else {
+                                  setFormData({ ...formData, map_point: '' });
+                                }
+                                setEditingMode('none');
+                              }}
+                              className="btn-danger"
+                              style={{ width: 'auto', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                            >
+                              Remove Point
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingMode(editingMode === 'point' ? 'none' : 'point')}
+                              className={editingMode === 'point' ? 'btn-primary' : 'btn-secondary'}
+                              style={{ width: 'auto', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                            >
+                              {editingMode === 'point' ? '✓' : ''} Set Point
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setEditingMode(editingMode === 'polygon' ? 'none' : 'polygon')}
@@ -978,20 +1382,33 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                           </button>
                         </div>
                         {(editing || formData.map_point || formData.map_polygon) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormData({ ...formData, map_point: '', map_polygon: '' });
-                              if (editing) {
-                                handlePointChange(editing.id, null);
-                                handlePolygonChange(editing.id, null);
-                              }
-                            }}
-                            className="btn-danger"
-                            style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.9rem', marginBottom: '0.5rem' }}
-                          >
-                            Clear Map Data
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData({ ...formData, map_point: '', map_polygon: '' });
+                                if (editing) {
+                                  handlePointChange(editing.id, null);
+                                  handlePolygonChange(editing.id, null);
+                                }
+                              }}
+                              className="btn-danger"
+                              style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.9rem', marginBottom: '0.5rem' }}
+                            >
+                              Clear Map Data
+                            </button>
+                            {formData.map_polygon && (
+                              <button
+                                type="button"
+                                onClick={handleCreateMapFromArea}
+                                className="btn-primary"
+                                style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.9rem', marginBottom: '0.5rem' }}
+                                title="Create a new map from the selected polygon/circle area"
+                              >
+                                🗺️ Create Map from Area
+                              </button>
+                            )}
+                          </>
                         )}
                         <small style={{ color: 'var(--text-secondary)', display: 'block' }}>
                           {editingMode === 'point' && 'Click on the map to set the location point (cannot overlap polygons)'}
@@ -1096,6 +1513,82 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Map Creation Modal */}
+      {showMapForm && (
+        <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) setShowMapForm(false); }}>
+          <div style={{
+            background: 'var(--bg-primary)',
+            padding: '2rem',
+            borderRadius: '8px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>Create New Map</h3>
+              <button
+                onClick={() => setShowMapForm(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleCreateMap}>
+              <div className="form-group">
+                <label>Map Name</label>
+                <input
+                  type="text"
+                  value={mapFormData.name}
+                  onChange={(e) => setMapFormData({ ...mapFormData, name: e.target.value })}
+                  required
+                  placeholder="e.g., Main Facility Map"
+                />
+              </div>
+              <div className="form-group">
+                <label>Map Image (.jpg, .jpeg, .png, .webp)</label>
+                <input
+                  id="map-image-input"
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mapFormData.is_default}
+                    onChange={(e) => setMapFormData({ ...mapFormData, is_default: e.target.checked })}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  Set as default map
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
+                  Create Map
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMapForm(false)}
+                  className="btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

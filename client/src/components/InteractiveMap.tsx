@@ -26,6 +26,7 @@ interface LocationTag {
   category?: string;
   visible?: number | boolean; // 1/0 or true/false
   color?: string; // Hex color code
+  map_id?: number; // ID of the map this tag belongs to
 }
 
 interface InteractiveMapProps {
@@ -41,6 +42,9 @@ interface InteractiveMapProps {
   showTags?: boolean;
   onRemovePoint?: (tagId: number) => void;
   visibleCategories?: Set<string>;
+  cropBounds?: { minX: number; maxX: number; minY: number; maxY: number } | null; // For transforming coordinates from parent map
+  currentMapId?: number | null; // ID of the current map being displayed
+  parentMapId?: number | null; // ID of the parent map (if this is a child map)
 }
 
 // Component to fit map bounds when ready
@@ -249,12 +253,15 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onPointChange,
   onPolygonChange,
   editingMode = 'none',
-  mapImageUrl = '/domes-facility-map.webp',
+  mapImageUrl = '',
   imageBounds = [[0, 0], [1000, 1000]], // Default bounds, should match image aspect ratio
   allowEditingWithoutTag = false,
   showTags = true,
   onRemovePoint,
   visibleCategories,
+  cropBounds = null,
+  currentMapId = null,
+  parentMapId = null,
 }) => {
   const [mapReady, setMapReady] = useState(false);
   const [polygonPoints, setPolygonPoints] = useState<L.LatLng[]>([]);
@@ -300,6 +307,23 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     (imageBounds[0][1] + imageBounds[1][1]) / 2,
   ];
 
+  if (!mapImageUrl) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'var(--text-secondary)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🗺️</div>
+          <p>No map image available</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="interactive-map-container" style={{ height: '100%', width: '100%' }}>
       <MapContainer
@@ -315,8 +339,13 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
           url={mapImageUrl}
           bounds={imageBounds}
           eventHandlers={{
-            error: () => {
-              console.warn('Map image failed to load. Please ensure the image is placed in /public/mitchell-park-domes-map.jpg');
+            load: () => {
+              console.log('Map image loaded successfully:', mapImageUrl);
+            },
+            error: (e) => {
+              console.error('Map image failed to load:', mapImageUrl, e);
+              console.error('Image URL:', mapImageUrl);
+              console.error('Image bounds:', imageBounds);
             }
           }}
         />
@@ -370,7 +399,24 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
           if (tag.map_point) {
             try {
-              const point: MapPoint = JSON.parse(tag.map_point);
+              let point: MapPoint = JSON.parse(tag.map_point);
+              // Transform coordinates only if:
+              // 1. This is a child map (cropBounds exists)
+              // 2. The tag belongs to the parent map (tag.map_id === parentMapId)
+              // Tags created on the child map itself should not be transformed
+              if (cropBounds && parentMapId && tag.map_id === parentMapId) {
+                const { minX, maxX, minY, maxY } = cropBounds;
+                const width = maxX - minX;
+                const height = maxY - minY;
+                // Transform from parent map coordinates to child map coordinates
+                point = {
+                  x: (point.x - minX) / width,
+                  y: (point.y - minY) / height
+                };
+                // Clamp to valid range
+                point.x = Math.max(0, Math.min(1, point.x));
+                point.y = Math.max(0, Math.min(1, point.y));
+              }
               markerPosition = normalizedToLatLng(point, imageBounds);
             } catch (e) {
               console.error('Error parsing map_point for tag', tag.id, e);
@@ -379,7 +425,23 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
           if (tag.map_polygon) {
             try {
-              const polygon: MapPoint[] = JSON.parse(tag.map_polygon);
+              let polygon: MapPoint[] = JSON.parse(tag.map_polygon);
+              // Transform coordinates only if tag belongs to parent map
+              if (cropBounds && parentMapId && tag.map_id === parentMapId) {
+                const { minX, maxX, minY, maxY } = cropBounds;
+                const width = maxX - minX;
+                const height = maxY - minY;
+                polygon = polygon.map(p => {
+                  const transformed = {
+                    x: (p.x - minX) / width,
+                    y: (p.y - minY) / height
+                  };
+                  // Clamp to valid range
+                  transformed.x = Math.max(0, Math.min(1, transformed.x));
+                  transformed.y = Math.max(0, Math.min(1, transformed.y));
+                  return transformed;
+                });
+              }
               polygonPositions = polygon.map(p => normalizedToLatLng(p, imageBounds));
             } catch (e) {
               console.error('Error parsing map_polygon for tag', tag.id, e);
