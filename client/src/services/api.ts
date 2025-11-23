@@ -43,11 +43,33 @@ export const adminAPI = {
   getScheduledPosts: () => api.get('/admin/scheduled-posts'),
   createScheduledPost: (data: any) => api.post('/admin/scheduled-posts', data),
   toggleScheduledPost: (id: number) => api.patch(`/admin/scheduled-posts/${id}/toggle`),
+  deleteScheduledPost: (id: number) => api.delete(`/admin/scheduled-posts/${id}`),
+  // Salesforce Integration
+  connectSalesforce: (apiKey: string) => api.post('/admin/salesforce/connect', { api_key: apiKey }),
+  getSalesforceStatus: () => api.get('/admin/salesforce/status'),
+  // Organization Announcements
+  getAnnouncements: () => api.get('/admin/announcements'),
+  createAnnouncement: (data: any) => api.post('/admin/announcements', data),
+  sendAnnouncement: (id: number) => api.post(`/admin/announcements/${id}/send`),
+  toggleAnnouncement: (id: number) => api.patch(`/admin/announcements/${id}/toggle`),
+  deleteAnnouncement: (id: number) => api.delete(`/admin/announcements/${id}`),
   // Location Tags
-  getLocationTags: () => api.get('/admin/location-tags'),
+  getLocationTags: (mapId?: number) => {
+    const params = mapId ? { params: { map_id: mapId } } : {};
+    return api.get('/admin/location-tags', params);
+  },
   createLocationTag: (data: any) => api.post('/admin/location-tags', data),
   updateLocationTag: (id: number, data: any) => api.put(`/admin/location-tags/${id}`, data),
   deleteLocationTag: (id: number) => api.delete(`/admin/location-tags/${id}`),
+  // Maps
+  getMaps: () => api.get('/admin/maps'),
+  createMap: (formData: FormData) => api.post('/admin/maps', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  updateMap: (id: number, formData: FormData) => api.put(`/admin/maps/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteMap: (id: number) => api.delete(`/admin/maps/${id}`),
   // Requirement Tags
   getRequirementTags: () => api.get('/admin/requirement-tags'),
   createRequirementTag: (data: any) => api.post('/admin/requirement-tags', data),
