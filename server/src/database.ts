@@ -93,6 +93,13 @@ export async function initDatabase() {
     )
   `);
 
+  // Add location_id column to existing position_templates table if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE position_templates ADD COLUMN location_id INTEGER`);
+  } catch (e: any) {
+    // Column already exists, ignore
+  }
+
   // Posted positions
   await dbRun(`
     CREATE TABLE IF NOT EXISTS positions (
@@ -129,6 +136,27 @@ export async function initDatabase() {
       FOREIGN KEY (position_id) REFERENCES positions(id),
       FOREIGN KEY (volunteer_id) REFERENCES users(id),
       UNIQUE(position_id, volunteer_id)
+    )
+  `);
+
+  // Requirement tags
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS requirement_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Template requirement tags (many-to-many relationship)
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS template_requirement_tags (
+      template_id INTEGER NOT NULL,
+      requirement_tag_id INTEGER NOT NULL,
+      PRIMARY KEY (template_id, requirement_tag_id),
+      FOREIGN KEY (template_id) REFERENCES position_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY (requirement_tag_id) REFERENCES requirement_tags(id) ON DELETE CASCADE
     )
   `);
 

@@ -48,6 +48,11 @@ export const adminAPI = {
   createLocationTag: (data: any) => api.post('/admin/location-tags', data),
   updateLocationTag: (id: number, data: any) => api.put(`/admin/location-tags/${id}`, data),
   deleteLocationTag: (id: number) => api.delete(`/admin/location-tags/${id}`),
+  // Requirement Tags
+  getRequirementTags: () => api.get('/admin/requirement-tags'),
+  createRequirementTag: (data: any) => api.post('/admin/requirement-tags', data),
+  updateRequirementTag: (id: number, data: any) => api.put(`/admin/requirement-tags/${id}`, data),
+  deleteRequirementTag: (id: number) => api.delete(`/admin/requirement-tags/${id}`),
 };
 
 export const volunteerAPI = {

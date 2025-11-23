@@ -34,7 +34,7 @@ interface InteractiveMapProps {
   onTagSelect?: (tag: LocationTag | null) => void;
   onPointChange?: (tagId: number, point: MapPoint | null) => void;
   onPolygonChange?: (tagId: number, polygon: MapPoint[] | null) => void;
-  editingMode?: 'point' | 'polygon' | 'circle' | 'none';
+  editingMode?: 'point' | 'polygon' | 'circle' | 'move' | 'none';
   mapImageUrl?: string;
   imageBounds?: [[number, number], [number, number]]; // [[south, west], [north, east]]
   allowEditingWithoutTag?: boolean;
@@ -43,9 +43,44 @@ interface InteractiveMapProps {
   visibleCategories?: Set<string>;
 }
 
+// Component to fit map bounds when ready
+const MapBoundsFitter: React.FC<{
+  bounds: [[number, number], [number, number]];
+  mapReady: boolean;
+}> = ({ bounds, mapReady }) => {
+  const map = useMap();
+  const hasFittedRef = useRef(false);
+  
+  useEffect(() => {
+    if (map && bounds && mapReady && !hasFittedRef.current) {
+      // Convert bounds to Leaflet LatLngBounds
+      const [[south, west], [north, east]] = bounds;
+      const leafletBounds = L.latLngBounds(
+        L.latLng(south, west),
+        L.latLng(north, east)
+      );
+      
+      // Fit the map to the bounds with padding
+      map.fitBounds(leafletBounds, {
+        padding: [20, 20], // Add some padding around the edges
+        maxZoom: 5 // Limit max zoom to prevent over-zooming
+      });
+      
+      hasFittedRef.current = true;
+    }
+  }, [map, bounds, mapReady]);
+  
+  // Reset when bounds change significantly (e.g., image loads)
+  useEffect(() => {
+    hasFittedRef.current = false;
+  }, [bounds]);
+  
+  return null;
+};
+
 // Component to handle map interactions
 const MapInteractionHandler: React.FC<{
-  editingMode: 'point' | 'polygon' | 'circle' | 'none';
+  editingMode: 'point' | 'polygon' | 'circle' | 'move' | 'none';
   selectedTag: LocationTag | null;
   onPointChange?: (tagId: number, point: MapPoint | null) => void;
   onPolygonChange?: (tagId: number, polygon: MapPoint[] | null) => void;
@@ -191,6 +226,113 @@ const EditingCircle: React.FC<{
   );
 };
 
+// Component to make polygon draggable
+const DraggablePolygonWrapper: React.FC<{
+  positions: L.LatLng[];
+  pathOptions: L.PathOptions;
+  isDraggable: boolean;
+  onDragEnd: (positions: L.LatLng[]) => void;
+  onClick: () => void;
+  children?: React.ReactNode;
+}> = ({ positions, pathOptions, isDraggable, onDragEnd, onClick, children }) => {
+  const polygonRef = useRef<L.Polygon | null>(null);
+  const dragStartRef = useRef<L.LatLng | null>(null);
+  const originalPositionsRef = useRef<L.LatLng[]>([]);
+  const isDraggingRef = useRef(false);
+
+  useEffect(() => {
+    if (polygonRef.current) {
+      const polygon = polygonRef.current as any;
+      const map = polygon.getMap();
+      
+      if (!map) return;
+      
+      if (isDraggable) {
+        // Set cursor style
+        const element = polygon.getElement() as HTMLElement | null;
+        if (element) {
+          element.style.cursor = 'move';
+        }
+        
+        // Handle mousedown to start drag
+        const handleMouseDown = (e: L.LeafletMouseEvent) => {
+          isDraggingRef.current = false;
+          dragStartRef.current = e.latlng;
+          originalPositionsRef.current = [...positions];
+        };
+        
+        // Handle mousemove to update positions during drag
+        const handleMouseMove = (e: L.LeafletMouseEvent) => {
+          if (dragStartRef.current) {
+            isDraggingRef.current = true;
+            const offset = {
+              lat: e.latlng.lat - dragStartRef.current.lat,
+              lng: e.latlng.lng - dragStartRef.current.lng
+            };
+            
+            const newPositions = originalPositionsRef.current.map(pos => 
+              L.latLng(pos.lat + offset.lat, pos.lng + offset.lng)
+            );
+            
+            polygon.setLatLngs(newPositions);
+          }
+        };
+        
+        // Handle mouseup to end drag
+        const handleMouseUp = () => {
+          if (dragStartRef.current && isDraggingRef.current) {
+            const newPositions = polygon.getLatLngs()[0] as L.LatLng[];
+            onDragEnd(newPositions);
+          }
+          dragStartRef.current = null;
+          isDraggingRef.current = false;
+        };
+        
+        polygon.on('mousedown', handleMouseDown);
+        map.on('mousemove', handleMouseMove);
+        map.on('mouseup', handleMouseUp);
+        
+        return () => {
+          polygon.off('mousedown', handleMouseDown);
+          map.off('mousemove', handleMouseMove);
+          map.off('mouseup', handleMouseUp);
+          const element = polygon.getElement() as HTMLElement | null;
+          if (element) {
+            element.style.cursor = '';
+          }
+        };
+      } else {
+        const element = polygon.getElement() as HTMLElement | null;
+        if (element) {
+          element.style.cursor = '';
+        }
+      }
+    }
+  }, [isDraggable, onDragEnd, positions]);
+
+  return (
+    <Polygon
+      ref={(ref: any) => {
+        if (ref) {
+          polygonRef.current = ref.leafletElement as L.Polygon;
+        }
+      }}
+      positions={positions}
+      pathOptions={pathOptions}
+      eventHandlers={{
+        click: (e) => {
+          // Only trigger onClick if we're not dragging
+          if (!isDraggingRef.current) {
+            onClick();
+          }
+        },
+      }}
+    >
+      {children}
+    </Polygon>
+  );
+};
+
 // Convert normalized coordinates (0-1) to LatLng
 function normalizedToLatLng(point: MapPoint, bounds: [[number, number], [number, number]]): L.LatLng {
   const [[south, west], [north, east]] = bounds;
@@ -259,7 +401,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   }, [polygonPoints, editingMode, selectedTag, imageBounds, onPolygonChange]);
 
 
-  // Calculate center and zoom based on image bounds
+  // Calculate center based on image bounds (for initial render)
   const center: [number, number] = [
     (imageBounds[0][0] + imageBounds[1][0]) / 2,
     (imageBounds[0][1] + imageBounds[1][1]) / 2,
@@ -269,7 +411,9 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     <div className="interactive-map-container" style={{ height: '100%', width: '100%' }}>
       <MapContainer
         center={center}
-        zoom={2}
+        zoom={0}
+        minZoom={-2}
+        maxZoom={5}
         style={{ height: '100%', width: '100%' }}
         crs={L.CRS.Simple}
         whenReady={() => setMapReady(true)}
@@ -285,7 +429,9 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         />
         
         {mapReady && (
-          <MapInteractionHandler
+          <>
+            <MapBoundsFitter bounds={imageBounds} mapReady={mapReady} />
+            <MapInteractionHandler
             editingMode={editingMode}
             selectedTag={selectedTag || null}
             onPointChange={onPointChange}
@@ -300,6 +446,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             circleRadius={circleRadius}
             setCircleRadius={setCircleRadius}
           />
+          </>
         )}
 
         {editingMode === 'polygon' && (
@@ -382,7 +529,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                     <div>
                       <strong>{tag.name}</strong>
                       {tag.description && <p>{tag.description}</p>}
-                      {onRemovePoint && (
+                      {/* {onRemovePoint && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -403,13 +550,13 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                         >
                           Remove Point
                         </button>
-                      )}
+                      )} */}
                     </div>
                   </Popup>
                 </Marker>
               )}
               {polygonPositions.length > 0 && (
-                <Polygon
+                <DraggablePolygonWrapper
                   positions={polygonPositions}
                   pathOptions={{
                     color: borderColor,
@@ -417,8 +564,20 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                     fillOpacity: 0.3,
                     weight: isSelected ? 3 : 2,
                   }}
-                  eventHandlers={{
-                    click: () => onTagSelect?.(tag),
+                  isDraggable={editingMode === 'move' && isSelected}
+                  onDragEnd={(newPositions) => {
+                    const normalizedPolygon = newPositions.map(p => latLngToNormalized(p, imageBounds));
+                    onPolygonChange?.(tag.id, normalizedPolygon);
+                  }}
+                  onClick={() => {
+                    if (editingMode === 'move') {
+                      // In move mode, clicking selects the polygon to move
+                      if (!isSelected) {
+                        onTagSelect?.(tag);
+                      }
+                    } else {
+                      onTagSelect?.(tag);
+                    }
                   }}
                 >
                   <Popup>
@@ -427,29 +586,12 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                       {tag.description && <p>{tag.description}</p>}
                     </div>
                   </Popup>
-                </Polygon>
+                </DraggablePolygonWrapper>
               )}
             </React.Fragment>
           );
         })}
       </MapContainer>
-
-      <div className="map-legend">
-        <div className="legend-item">
-          <div className="legend-marker"></div>
-          <span>Location Point</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-polygon"></div>
-          <span>Location Area</span>
-        </div>
-        {editingMode === 'point' && (
-          <div className="legend-hint">Click on the map to set the location point</div>
-        )}
-        {editingMode === 'polygon' && (
-          <div className="legend-hint">Click on the map to add points to the polygon</div>
-        )}
-      </div>
     </div>
   );
 };

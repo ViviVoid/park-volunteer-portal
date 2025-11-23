@@ -212,6 +212,114 @@ router.delete('/location-tags/:id', async (req, res) => {
   }
 });
 
+// Requirement Tags Management
+router.get('/requirement-tags', async (req, res) => {
+  try {
+    const tags = await dbAll('SELECT * FROM requirement_tags ORDER BY name ASC');
+    res.json(tags);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/requirement-tags', [
+  body('name').trim().notEmpty(),
+  body('description').optional({ nullable: true, checkFalsy: true }).trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { name, description } = req.body;
+    
+    const result = await dbRun(
+      'INSERT INTO requirement_tags (name, description) VALUES (?, ?)',
+      [name.trim(), description && description.trim() ? description.trim() : null]
+    );
+
+    const tag = await dbGet('SELECT * FROM requirement_tags WHERE id = ?', [result.lastID]);
+    res.status(201).json(tag);
+  } catch (error: any) {
+    if (error.message && error.message.includes('UNIQUE constraint')) {
+      res.status(400).json({ error: 'Requirement tag with this name already exists' });
+    } else {
+      console.error('Error creating requirement tag:', error);
+      res.status(500).json({ error: error.message || 'Failed to create requirement tag' });
+    }
+  }
+});
+
+router.put('/requirement-tags/:id', [
+  body('name').optional().trim().notEmpty(),
+  body('description').optional({ nullable: true, checkFalsy: true }).trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (req.body.name) {
+      updates.push('name = ?');
+      values.push(req.body.name.trim());
+    }
+    if (req.body.description !== undefined) {
+      updates.push('description = ?');
+      values.push(req.body.description && req.body.description.trim() ? req.body.description.trim() : null);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(id);
+    await dbRun(
+      `UPDATE requirement_tags SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    const tag = await dbGet('SELECT * FROM requirement_tags WHERE id = ?', [id]);
+    res.json(tag);
+  } catch (error: any) {
+    if (error.message && error.message.includes('UNIQUE constraint')) {
+      res.status(400).json({ error: 'Requirement tag with this name already exists' });
+    } else {
+      console.error('Error updating requirement tag:', error);
+      res.status(500).json({ error: error.message || 'Failed to update requirement tag' });
+    }
+  }
+});
+
+router.delete('/requirement-tags/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if requirement tag is being used
+    const inUse = await dbGet(
+      'SELECT COUNT(*) as count FROM template_requirement_tags WHERE requirement_tag_id = ?',
+      [id]
+    );
+    
+    if ((inUse as any).count > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete requirement tag that is in use by templates' 
+      });
+    }
+
+    await dbRun('DELETE FROM requirement_tags WHERE id = ?', [id]);
+    res.json({ message: 'Requirement tag deleted' });
+  } catch (error: any) {
+    console.error('Error deleting requirement tag:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete requirement tag' });
+  }
+});
+
 // Get all position templates
 router.get('/templates', async (req, res) => {
   try {
@@ -221,7 +329,20 @@ router.get('/templates', async (req, res) => {
       LEFT JOIN location_tags lt ON t.location_id = lt.id
       ORDER BY t.created_at DESC
     `);
-    res.json(templates);
+    
+    // Get requirement tags for each template
+    const templatesWithTags = await Promise.all(templates.map(async (template: any) => {
+      const requirementTags = await dbAll(`
+        SELECT rt.*
+        FROM requirement_tags rt
+        INNER JOIN template_requirement_tags trt ON rt.id = trt.requirement_tag_id
+        WHERE trt.template_id = ?
+        ORDER BY rt.name ASC
+      `, [template.id]);
+      return { ...template, requirement_tags: requirementTags };
+    }));
+    
+    res.json(templatesWithTags);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -243,7 +364,9 @@ router.post('/templates', [
     })
     .withMessage('Duration must be a non-negative integer'),
   body('location_id').optional({ nullable: true, checkFalsy: true }).isInt(),
-  body('location').optional({ nullable: true, checkFalsy: true }).trim()
+  body('location').optional({ nullable: true, checkFalsy: true }).trim(),
+  body('requirement_tag_ids').optional().isArray(),
+  body('requirement_tag_ids.*').optional().isInt()
 ], async (req: AuthRequest, res) => {
   try {
     const errors = validationResult(req);
@@ -251,7 +374,7 @@ router.post('/templates', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { title, description, requirements, duration_hours, location_id, location } = req.body;
+    const { title, description, requirements, duration_hours, location_id, location, requirement_tag_ids } = req.body;
     
     // Convert empty strings to null and parse duration_hours
     let durationHoursValue = null;
@@ -277,13 +400,43 @@ router.post('/templates', [
       ]
     );
 
+    // Associate requirement tags
+    if (requirement_tag_ids && Array.isArray(requirement_tag_ids) && requirement_tag_ids.length > 0) {
+      for (const tagId of requirement_tag_ids) {
+        const tagIdNum = parseInt(tagId, 10);
+        if (!isNaN(tagIdNum)) {
+          try {
+            await dbRun(
+              'INSERT INTO template_requirement_tags (template_id, requirement_tag_id) VALUES (?, ?)',
+              [result.lastID, tagIdNum]
+            );
+          } catch (e: any) {
+            // Ignore duplicate key errors
+            if (!e.message || !e.message.includes('UNIQUE constraint')) {
+              throw e;
+            }
+          }
+        }
+      }
+    }
+
+    // Get template with all associations
     const template = await dbGet(`
       SELECT t.*, lt.name as location_name, lt.id as location_tag_id
       FROM position_templates t
       LEFT JOIN location_tags lt ON t.location_id = lt.id
       WHERE t.id = ?
     `, [result.lastID]);
-    res.status(201).json(template);
+    
+    const requirementTags = await dbAll(`
+      SELECT rt.*
+      FROM requirement_tags rt
+      INNER JOIN template_requirement_tags trt ON rt.id = trt.requirement_tag_id
+      WHERE trt.template_id = ?
+      ORDER BY rt.name ASC
+    `, [result.lastID]);
+    
+    res.status(201).json({ ...template, requirement_tags: requirementTags });
   } catch (error: any) {
     console.error('Error creating template:', error);
     res.status(500).json({ error: error.message || 'Failed to create template' });
@@ -346,11 +499,52 @@ router.put('/templates/:id', [
       values
     );
 
-    const template = await dbGet('SELECT * FROM position_templates WHERE id = ?', [id]);
-    res.json(template);
+    // Update requirement tag associations if provided
+    if (req.body.requirement_tag_ids !== undefined) {
+      // Delete existing associations
+      await dbRun('DELETE FROM template_requirement_tags WHERE template_id = ?', [id]);
+      
+      // Add new associations
+      if (Array.isArray(req.body.requirement_tag_ids) && req.body.requirement_tag_ids.length > 0) {
+        for (const tagId of req.body.requirement_tag_ids) {
+          const tagIdNum = parseInt(tagId, 10);
+          if (!isNaN(tagIdNum)) {
+            try {
+              await dbRun(
+                'INSERT INTO template_requirement_tags (template_id, requirement_tag_id) VALUES (?, ?)',
+                [id, tagIdNum]
+              );
+            } catch (e: any) {
+              // Ignore duplicate key errors
+              if (!e.message || !e.message.includes('UNIQUE constraint')) {
+                throw e;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Get template with all associations
+    const template = await dbGet(`
+      SELECT t.*, lt.name as location_name, lt.id as location_tag_id
+      FROM position_templates t
+      LEFT JOIN location_tags lt ON t.location_id = lt.id
+      WHERE t.id = ?
+    `, [id]);
+    
+    const requirementTags = await dbAll(`
+      SELECT rt.*
+      FROM requirement_tags rt
+      INNER JOIN template_requirement_tags trt ON rt.id = trt.requirement_tag_id
+      WHERE trt.template_id = ?
+      ORDER BY rt.name ASC
+    `, [id]);
+    
+    res.json({ ...template, requirement_tags: requirementTags });
   } catch (error: any) {
-    console.error('Error creating template:', error);
-    res.status(500).json({ error: error.message || 'Failed to create template' });
+    console.error('Error updating template:', error);
+    res.status(500).json({ error: error.message || 'Failed to update template' });
   }
 });
 
