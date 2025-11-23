@@ -30,7 +30,7 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
   });
   const [submitting, setSubmitting] = useState(false);
   const [selectedTag, setSelectedTag] = useState<LocationTag | null>(null);
-  const [editingMode, setEditingMode] = useState<'point' | 'polygon' | 'circle' | 'move' | 'none'>('none');
+  const [editingMode, setEditingMode] = useState<'point' | 'polygon' | 'circle' | 'none'>('none');
   const [showTags, setShowTags] = useState(true);
   const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
   const [categories, setCategories] = useState<string[]>([]);
@@ -571,13 +571,11 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                   {editingMode === 'point' && '📍 Setting Point Location'}
                   {editingMode === 'polygon' && '🗺️ Drawing Polygon Area'}
                   {editingMode === 'circle' && '⭕ Drawing Circle Area'}
-                  {editingMode === 'move' && '↔️ Moving Area'}
                 </div>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
                   {editingMode === 'point' && 'Click anywhere on the map to set the location point'}
                   {editingMode === 'polygon' && 'Click on the map to add points to the polygon. Click outside the form to finish.'}
                   {editingMode === 'circle' && 'Click to set the center, then move your mouse to adjust the radius. Click again to finish.'}
-                  {editingMode === 'move' && 'Drag the selected area on the map to move it to a new location'}
                 </div>
                 <button
                   type="button"
@@ -979,17 +977,6 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                             {editingMode === 'circle' ? '✓' : ''} Draw Circle
                           </button>
                         </div>
-                        {/* Move Area button - only show when there's a polygon/circle */}
-                        {(formData.map_polygon || (editing && editing.map_polygon)) && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingMode(editingMode === 'move' ? 'none' : 'move')}
-                            className={editingMode === 'move' ? 'btn-primary' : 'btn-secondary'}
-                            style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.9rem', marginBottom: '0.5rem' }}
-                          >
-                            {editingMode === 'move' ? '✓' : ''} Move Area
-                          </button>
-                        )}
                         {(editing || formData.map_point || formData.map_polygon) && (
                           <button
                             type="button"
@@ -1010,7 +997,6 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                           {editingMode === 'point' && 'Click on the map to set the location point (cannot overlap polygons)'}
                           {editingMode === 'polygon' && 'Click on the map to add points to the polygon area'}
                           {editingMode === 'circle' && 'Click to set center, move mouse to adjust radius, click again to finish'}
-                          {editingMode === 'move' && 'Drag the area on the map to move it to a new location'}
                           {editingMode === 'none' && 'Select a drawing mode to add map location'}
                         </small>
                       </div>
@@ -1105,7 +1091,6 @@ const LocationTagsManager: React.FC<LocationTagsManagerProps> = ({
                 {editingMode === 'point' && 'Click on the map to set the location point'}
                 {editingMode === 'polygon' && 'Click on the map to add points to the polygon'}
                 {editingMode === 'circle' && 'Click to set center, move mouse to adjust radius, click again to finish'}
-                {editingMode === 'move' && 'Drag the area on the map to move it'}
               </div>
             )}
           </div>

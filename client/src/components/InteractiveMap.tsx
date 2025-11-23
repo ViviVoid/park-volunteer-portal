@@ -34,7 +34,7 @@ interface InteractiveMapProps {
   onTagSelect?: (tag: LocationTag | null) => void;
   onPointChange?: (tagId: number, point: MapPoint | null) => void;
   onPolygonChange?: (tagId: number, polygon: MapPoint[] | null) => void;
-  editingMode?: 'point' | 'polygon' | 'circle' | 'move' | 'none';
+  editingMode?: 'point' | 'polygon' | 'circle' | 'none';
   mapImageUrl?: string;
   imageBounds?: [[number, number], [number, number]]; // [[south, west], [north, east]]
   allowEditingWithoutTag?: boolean;
@@ -80,7 +80,7 @@ const MapBoundsFitter: React.FC<{
 
 // Component to handle map interactions
 const MapInteractionHandler: React.FC<{
-  editingMode: 'point' | 'polygon' | 'circle' | 'move' | 'none';
+  editingMode: 'point' | 'polygon' | 'circle' | 'none';
   selectedTag: LocationTag | null;
   onPointChange?: (tagId: number, point: MapPoint | null) => void;
   onPolygonChange?: (tagId: number, polygon: MapPoint[] | null) => void;
@@ -223,113 +223,6 @@ const EditingCircle: React.FC<{
         dashArray: '5, 5',
       }}
     />
-  );
-};
-
-// Component to make polygon draggable
-const DraggablePolygonWrapper: React.FC<{
-  positions: L.LatLng[];
-  pathOptions: L.PathOptions;
-  isDraggable: boolean;
-  onDragEnd: (positions: L.LatLng[]) => void;
-  onClick: () => void;
-  children?: React.ReactNode;
-}> = ({ positions, pathOptions, isDraggable, onDragEnd, onClick, children }) => {
-  const polygonRef = useRef<L.Polygon | null>(null);
-  const dragStartRef = useRef<L.LatLng | null>(null);
-  const originalPositionsRef = useRef<L.LatLng[]>([]);
-  const isDraggingRef = useRef(false);
-
-  useEffect(() => {
-    if (polygonRef.current) {
-      const polygon = polygonRef.current as any;
-      const map = polygon.getMap();
-      
-      if (!map) return;
-      
-      if (isDraggable) {
-        // Set cursor style
-        const element = polygon.getElement() as HTMLElement | null;
-        if (element) {
-          element.style.cursor = 'move';
-        }
-        
-        // Handle mousedown to start drag
-        const handleMouseDown = (e: L.LeafletMouseEvent) => {
-          isDraggingRef.current = false;
-          dragStartRef.current = e.latlng;
-          originalPositionsRef.current = [...positions];
-        };
-        
-        // Handle mousemove to update positions during drag
-        const handleMouseMove = (e: L.LeafletMouseEvent) => {
-          if (dragStartRef.current) {
-            isDraggingRef.current = true;
-            const offset = {
-              lat: e.latlng.lat - dragStartRef.current.lat,
-              lng: e.latlng.lng - dragStartRef.current.lng
-            };
-            
-            const newPositions = originalPositionsRef.current.map(pos => 
-              L.latLng(pos.lat + offset.lat, pos.lng + offset.lng)
-            );
-            
-            polygon.setLatLngs(newPositions);
-          }
-        };
-        
-        // Handle mouseup to end drag
-        const handleMouseUp = () => {
-          if (dragStartRef.current && isDraggingRef.current) {
-            const newPositions = polygon.getLatLngs()[0] as L.LatLng[];
-            onDragEnd(newPositions);
-          }
-          dragStartRef.current = null;
-          isDraggingRef.current = false;
-        };
-        
-        polygon.on('mousedown', handleMouseDown);
-        map.on('mousemove', handleMouseMove);
-        map.on('mouseup', handleMouseUp);
-        
-        return () => {
-          polygon.off('mousedown', handleMouseDown);
-          map.off('mousemove', handleMouseMove);
-          map.off('mouseup', handleMouseUp);
-          const element = polygon.getElement() as HTMLElement | null;
-          if (element) {
-            element.style.cursor = '';
-          }
-        };
-      } else {
-        const element = polygon.getElement() as HTMLElement | null;
-        if (element) {
-          element.style.cursor = '';
-        }
-      }
-    }
-  }, [isDraggable, onDragEnd, positions]);
-
-  return (
-    <Polygon
-      ref={(ref: any) => {
-        if (ref) {
-          polygonRef.current = ref.leafletElement as L.Polygon;
-        }
-      }}
-      positions={positions}
-      pathOptions={pathOptions}
-      eventHandlers={{
-        click: (e) => {
-          // Only trigger onClick if we're not dragging
-          if (!isDraggingRef.current) {
-            onClick();
-          }
-        },
-      }}
-    >
-      {children}
-    </Polygon>
   );
 };
 
@@ -556,7 +449,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 </Marker>
               )}
               {polygonPositions.length > 0 && (
-                <DraggablePolygonWrapper
+                <Polygon
                   positions={polygonPositions}
                   pathOptions={{
                     color: borderColor,
@@ -564,20 +457,8 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                     fillOpacity: 0.3,
                     weight: isSelected ? 3 : 2,
                   }}
-                  isDraggable={editingMode === 'move' && isSelected}
-                  onDragEnd={(newPositions) => {
-                    const normalizedPolygon = newPositions.map(p => latLngToNormalized(p, imageBounds));
-                    onPolygonChange?.(tag.id, normalizedPolygon);
-                  }}
-                  onClick={() => {
-                    if (editingMode === 'move') {
-                      // In move mode, clicking selects the polygon to move
-                      if (!isSelected) {
-                        onTagSelect?.(tag);
-                      }
-                    } else {
-                      onTagSelect?.(tag);
-                    }
+                  eventHandlers={{
+                    click: () => onTagSelect?.(tag),
                   }}
                 >
                   <Popup>
@@ -586,7 +467,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                       {tag.description && <p>{tag.description}</p>}
                     </div>
                   </Popup>
-                </DraggablePolygonWrapper>
+                </Polygon>
               )}
             </React.Fragment>
           );
