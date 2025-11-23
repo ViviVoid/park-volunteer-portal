@@ -1,9 +1,9 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminHome from './admin/AdminHome';
-import Templates from './admin/Templates';
-import Positions from './admin/Positions';
-import ScheduledPosts from './admin/ScheduledPosts';
+import VolunteerManagement from './admin/VolunteerManagement';
+import OrganizationCommunications from './admin/OrganizationCommunications';
+import InteractiveMapPage from './admin/InteractiveMap';
 import './Dashboard.css';
 
 const AdminDashboard: React.FC = () => {
@@ -11,9 +11,9 @@ const AdminDashboard: React.FC = () => {
     <div className="dashboard">
       <Routes>
         <Route path="/" element={<AdminHome />} />
-        <Route path="/templates" element={<Templates />} />
-        <Route path="/positions" element={<Positions />} />
-        <Route path="/scheduled" element={<ScheduledPosts />} />
+        <Route path="/volunteer-management" element={<VolunteerManagement />} />
+        <Route path="/communications" element={<OrganizationCommunications />} />
+        <Route path="/interactive-map" element={<InteractiveMapPage />} />
       </Routes>
     </div>
   );
