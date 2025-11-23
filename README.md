@@ -13,6 +13,7 @@ A full-stack volunteer management system for local parks with administrative con
 - **Scheduling**: Automated posting of positions using cron expressions
 - **Authentication**: Role-based access (admin/volunteer)
 - **Google Calendar Integration**: Connect Google accounts to sync calendar data and automatically forward scheduler output to Google Calendars
+- **Salesforce Integration**: Sync volunteers to Salesforce Contacts and create marketing campaigns through Salesforce Marketing Cloud
 
 ## Tech Stack
 
@@ -66,6 +67,7 @@ See `server/.env.example` for required configuration:
 - `GOOGLE_CLIENT_SECRET`: Google OAuth 2.0 Client Secret
 - `GOOGLE_REDIRECT_URI`: OAuth redirect URI (default: http://localhost:5000/api/admin/google/callback)
 - `CLIENT_URL`: Frontend URL for OAuth redirects (default: http://localhost:3000)
+- `SALESFORCE_*`: Salesforce API credentials (see [SALESFORCE_SETUP.md](SALESFORCE_SETUP.md) for details)
 
 ## Usage
 
@@ -542,7 +544,7 @@ You can import existing events from your Google Calendar into the scheduler.
 
 ### Organization Communications
 
-The Organization Communications feature allows staff members to send messages to each other within the system.
+The Organization Communications feature allows staff members to send announcements to volunteers via email and SMS. When Salesforce is connected, announcements are automatically created as campaigns in Salesforce Marketing Cloud.
 
 #### Sending Messages
 
@@ -691,6 +693,8 @@ Use this checklist to track your progress through the training:
 
 - **System Documentation**: Refer to the main README for technical details
 - **Quick Start Guide**: See QUICKSTART.md for setup information
+- **Google Calendar Setup**: See GOOGLE_SETUP.md for Google Calendar integration
+- **Salesforce Integration**: See SALESFORCE_SETUP.md for Salesforce integration setup and documentation
 - **Milwaukee Domes Analysis**: Review milwaukee-domes-proposal/milwaukee-domes-analysis.md for system capabilities
 - **Post-Project Timeline**: See milwaukee-domes-proposal/post-project-timeline.md for future features
 
