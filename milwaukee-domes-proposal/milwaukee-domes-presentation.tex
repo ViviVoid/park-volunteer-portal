@@ -1,0 +1,440 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+% Custom colors
+\definecolor{domesgreen}{RGB}{34, 139, 34}
+\definecolor{domesblue}{RGB}{0, 102, 204}
+
+% Title information
+\title[Milwaukee Domes Portal]{Milwaukee Domes Alliance\\Volunteer Portal Integration Proposal}
+\author{Andy Dao}
+\institute{Milwaukee Domes Alliance}
+\date{\today}
+
+% Remove navigation symbols
+\beamertemplatenavigationsymbolsempty
+
+\begin{document}
+
+% Title slide
+\begin{frame}
+\titlepage
+\end{frame}
+
+% Table of contents
+\begin{frame}{Overview}
+\tableofcontents
+\end{frame}
+
+\section{Executive Summary}
+
+\begin{frame}{Executive Summary}
+\begin{itemize}
+    \item Analysis of adapting existing Park Volunteer Portal for Milwaukee Domes Alliance
+    \item Addresses \textbf{7 key considerations} for visitor experience and operations
+    \item Evaluates both \textbf{AI-enhanced} and \textbf{non-AI} approaches
+    \item Focus on \textbf{cost-effectiveness} for non-profit organization
+    \item Existing system provides solid foundation with minimal modifications
+\end{itemize}
+\end{frame}
+
+\section{Key Considerations}
+
+\subsection{1. Personalization}
+
+\begin{frame}{Personalization: Adapting to Diverse Audiences}
+\textbf{Staff Personalization:}
+\begin{itemize}
+    \item Extend role-based system: Horticulturists, Education Staff, Event Coordinators, Facilities Staff
+    \item Specialized dashboards and tools for each role
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Visitor Personalization:}
+\begin{itemize}
+    \item Interest-based filtering (botanical education, photography, conservation)
+    \item Volunteer opportunity matching based on skills and availability
+    \item Rule-based matching (non-AI) or ML recommendations (AI-enhanced)
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Recommendation:} Start with non-AI rule-based system; consider AI if user base >1000
+\end{frame}
+
+\subsection{2. Language Accessibility}
+
+\begin{frame}{Language Accessibility: Breaking Down Barriers}
+\textbf{Non-AI Approach (Recommended):}
+\begin{itemize}
+    \item Static translations (Spanish, Hmong, Arabic)
+    \item Volunteer-translated content management
+    \item Cost: \$0--50/month
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{AI-Enhanced Approach (Optional):}
+\begin{itemize}
+    \item Real-time translation services
+    \item Cost: \$10--50/month
+    \item Use only for dynamic content; static content should be human-translated
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Strategy:} Phase 1: Volunteer translators; Phase 2: AI for real-time features if needed
+\end{frame}
+
+\subsection{3. Seamless Integration}
+
+\begin{frame}{Seamless Integration: Low-Cost Solutions}
+\textbf{Existing Integration Points:}
+\begin{itemize}
+    \item Google Calendar (already implemented)
+    \item Email/SMS notifications
+    \item SQLite database (can migrate to PostgreSQL)
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Integration Opportunities:}
+\begin{itemize}
+    \item Event management systems
+    \item Visitor management/ticketing
+    \item Educational systems and curriculum standards
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Maintenance Strategy:}
+\begin{itemize}
+    \item Self-service admin tools
+    \item Comprehensive documentation
+    \item Volunteer tech support
+    \item Managed cloud hosting
+\end{itemize}
+\end{frame}
+
+\subsection{4. Educational Value}
+
+\begin{frame}{Educational Value: Enhancing Learning}
+\textbf{Exhibit Integration:}
+\begin{itemize}
+    \item Extend InteractiveMap to show educational opportunities
+    \item Link volunteer positions to specific domes (Tropical, Desert, Show Dome)
+    \item Create educational pathways connecting exhibits to activities
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Visitor Interpretation:}
+\begin{itemize}
+    \item Volunteer-led tour scheduling
+    \item Educational content management templates
+    \item Student group coordination tools
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Analytics:} Start with basic tracking (non-AI); consider AI analytics only if programs scale significantly
+\end{frame}
+
+\subsection{5. Usability}
+
+\begin{frame}{Usability: Intuitive and Accessible Design}
+\textbf{Current Strengths:}
+\begin{itemize}
+    \item Clean, modern React interface
+    \item Role-based access control
+    \item Mobile-responsive design
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Enhancements Needed:}
+\begin{itemize}
+    \item WCAG 2.1 AA compliance (accessibility)
+    \item Physical accessibility filters
+    \item Simplified onboarding for non-technical users
+    \item Video tutorials and help documentation
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Cost:} Primarily development time; minimal ongoing costs
+\end{frame}
+
+\subsection{6. Scalability and Flexibility}
+
+\begin{frame}{Scalability and Flexibility}
+\textbf{Technical Scalability:}
+\begin{itemize}
+    \item SQLite → PostgreSQL migration path
+    \item Cloud hosting scalability (Azure, AWS, Railway)
+    \item Modular architecture for easy feature additions
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Operational Scalability:}
+\begin{itemize}
+    \item Handles 50 to 500+ volunteers
+    \item Reusable position templates
+    \item Automated scheduling reduces manual coordination
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Flexibility:}
+\begin{itemize}
+    \item Customizable workflows
+    \item Multi-location support (all three domes)
+    \item Seasonal adaptations
+\end{itemize}
+\end{frame}
+
+\subsection{7. Proven Approaches}
+
+\begin{frame}{Proven Approaches: Learning from Peers}
+Analysis of \textbf{20 conservatories/botanical gardens} revealed:
+
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\textbf{Common Practices:}
+\begin{itemize}
+    \item Structured docent programs
+    \item Educational integration
+    \item Event coordination
+    \item Visitor engagement
+    \item Digital presence
+    \item Community partnerships
+\end{itemize}
+\end{column}
+
+\begin{column}{0.5\textwidth}
+\textbf{Examples:}
+\begin{itemize}
+    \item Brooklyn Botanic Garden
+    \item Missouri Botanical Garden
+    \item Longwood Gardens
+    \item New York Botanical Garden
+    \item Phipps Conservatory
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.5cm}
+\textbf{Application:} Extend existing portal features to match proven successful patterns
+\end{frame}
+
+\section{Cost Analysis}
+
+\begin{frame}{AI vs. Non-AI Cost Comparison}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Solution Type} & \textbf{Monthly Cost} & \textbf{Annual Cost} \\
+\midrule
+\textbf{Non-AI (Recommended)} & & \\
+\hspace{0.2cm} Hosting & \$10--50 & \$120--600 \\
+\hspace{0.2cm} Maintenance & Volunteer-based & \$0 \\
+\midrule
+\textbf{AI-Enhanced (Optional)} & & \\
+\hspace{0.2cm} Generative AI & \$50--200 & \$600--2400 \\
+\hspace{0.2cm} Translation AI & \$10--50 & \$120--600 \\
+\hspace{0.2cm} Analytics AI & \$100--500 & \$1200--6000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.5cm}
+\textbf{Recommendation:} Start with non-AI solutions (\$120--600/year); add AI only if:
+\begin{itemize}
+    \item User base >500 active users
+    \item Clear ROI demonstrated
+    \item Budget allows experimentation
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Cost Breakdown: Non-AI Solution}
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\textbf{One-Time Costs:}
+\begin{itemize}
+    \item Development/Setup
+    \item Initial configuration
+    \item Training materials
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Ongoing Costs:}
+\begin{itemize}
+    \item Hosting: \$10--50/month
+    \item Domain/SSL: \$0--20/year
+    \item Maintenance: Volunteer-based
+\end{itemize}
+\end{column}
+
+\begin{column}{0.5\textwidth}
+\textbf{Total Annual:} \$120--600
+
+\vspace{0.5cm}
+\textbf{Benefits:}
+\begin{itemize}
+    \item Predictable costs
+    \item No per-usage fees
+    \item Full control
+    \item Volunteer-maintainable
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Cost Breakdown: AI-Enhanced Solution}
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\textbf{When to Consider:}
+\begin{itemize}
+    \item User base >1000
+    \item High content generation needs
+    \item Real-time translation required
+    \item Advanced analytics needed
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Risk:}
+\begin{itemize}
+    \item Variable costs
+    \item Usage-dependent pricing
+    \item Potential cost overruns
+\end{itemize}
+\end{column}
+
+\begin{column}{0.5\textwidth}
+\textbf{AI Use Cases:}
+\begin{itemize}
+    \item Content generation
+    \item FAQ responses
+    \item Personalized recommendations
+    \item Real-time translation
+    \item Predictive analytics
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Annual Cost:} \$1920--9000+
+\end{column}
+\end{columns}
+\end{frame}
+
+\section{Implementation Roadmap}
+
+\begin{frame}{Implementation Roadmap}
+\begin{block}{Phase 1: Foundation (Months 1--2)}
+\begin{itemize}
+    \item Multi-location support (three domes)
+    \item Enhanced location tagging for exhibits
+    \item Educational program templates
+    \item Basic multi-language (English + Spanish)
+\end{itemize}
+\end{block}
+
+\begin{block}{Phase 2: Enhancement (Months 3--4)}
+\begin{itemize}
+    \item Visitor interest profiles
+    \item Advanced event scheduling
+    \item Accessibility improvements
+    \item System integrations
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Implementation Roadmap (Continued)}
+\begin{block}{Phase 3: Optimization (Months 5--6)}
+\begin{itemize}
+    \item Performance optimization
+    \item Advanced analytics (non-AI)
+    \item Community feedback integration
+    \item Documentation and training
+\end{itemize}
+\end{block}
+
+\begin{block}{Phase 4: Optional AI Features (Months 7+)}
+\begin{itemize}
+    \item Evaluate AI translation needs
+    \item Consider AI recommendations if user base grows
+    \item Implement only if cost-benefit is positive
+\end{itemize}
+\end{block}
+\end{frame}
+
+\section{Recommendations}
+
+\begin{frame}{Key Recommendations}
+\begin{enumerate}
+    \item \textbf{Start with non-AI solutions} - proven, cost-effective, maintainable
+    \item \textbf{Prioritize high-impact, low-cost features} first
+    \item \textbf{Implement incrementally} based on actual usage patterns
+    \item \textbf{Consider AI only} if user base exceeds 500-1000 users
+    \item \textbf{Maintain flexibility} for future enhancements
+    \item \textbf{Leverage volunteer expertise} for translation and tech support
+    \item \textbf{Focus on maintainability} - no dedicated Data Science team
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Priority Implementation}
+\begin{block}{High Priority (Low Cost, High Impact)}
+\begin{itemize}
+    \item Multi-location support for three domes
+    \item Educational program templates
+    \item Enhanced location tagging (exhibit-specific)
+\end{itemize}
+\end{block}
+
+\begin{block}{Medium Priority (Moderate Cost)}
+\begin{itemize}
+    \item Multi-language support (volunteer-translated)
+    \item Advanced scheduling for seasonal events
+    \item Visitor feedback integration
+\end{itemize}
+\end{block}
+
+\begin{block}{Low Priority (Evaluate ROI)}
+\begin{itemize}
+    \item AI-powered recommendations
+    \item Real-time translation services
+    \item Advanced analytics platforms
+\end{itemize}
+\end{block}
+\end{frame}
+
+\section{Conclusion}
+
+\begin{frame}{Conclusion}
+\begin{itemize}
+    \item Existing portal provides \textbf{solid foundation} with minimal modifications
+    \item \textbf{Cost-effective, maintainable} solutions address all 7 considerations
+    \item \textbf{AI features optional} - not core requirements
+    \item \textbf{Phased approach} minimizes risk, maximizes value
+    \item \textbf{Sustainable} for non-profit organization
+    \item \textbf{Flexible} for future growth and enhancements
+\end{itemize}
+
+\vspace{0.5cm}
+\begin{center}
+\Large \textbf{Questions?}
+\end{center}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{center}
+\Huge Thank You
+\vspace{1cm}
+
+\Large Milwaukee Domes Alliance\\
+Volunteer Portal Integration Proposal
+\end{center}
+\end{frame}
+
+\end{document}
+

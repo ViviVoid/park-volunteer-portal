@@ -252,6 +252,48 @@ export async function initDatabase() {
     // Migration not needed or already done
   }
 
+  // Google account connections
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS google_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_expiry DATETIME,
+      calendar_id TEXT,
+      calendar_name TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, email)
+    )
+  `);
+
+  // Calendar forwarding policies
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS calendar_forwarding_policies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      google_account_id INTEGER NOT NULL,
+      target_calendar_id TEXT NOT NULL,
+      target_calendar_name TEXT,
+      target_email_group TEXT,
+      position_template_id INTEGER,
+      location_id INTEGER,
+      is_active INTEGER DEFAULT 1,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (google_account_id) REFERENCES google_accounts(id) ON DELETE CASCADE,
+      FOREIGN KEY (position_template_id) REFERENCES position_templates(id) ON DELETE SET NULL,
+      FOREIGN KEY (location_id) REFERENCES location_tags(id) ON DELETE SET NULL,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+
   // Create default admin user if it doesn't exist
   const adminExists = await dbGet("SELECT id FROM users WHERE email = 'admin@park.local'");
   if (!adminExists) {

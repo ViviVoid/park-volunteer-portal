@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { dbAll, dbGet, dbRun } from '../database';
 import { notifyVolunteers } from './notifications';
 import { salesforceService } from './salesforce';
+import { GoogleCalendarService } from './googleCalendar';
 
 export function setupCronJobs() {
   // Check for scheduled posts every minute
@@ -97,6 +98,21 @@ async function createScheduledPosition(scheduled: any) {
         1 // Default admin user
       ]
     );
+
+    // Get the created position for forwarding
+    const position: any = await dbGet(
+      'SELECT * FROM positions WHERE id = ?',
+      [result.lastID]
+    );
+
+    // Forward to Google Calendars based on policies
+    if (position) {
+      try {
+        await GoogleCalendarService.forwardPositionToCalendars(position);
+      } catch (error) {
+        console.error('Error forwarding position to Google Calendars:', error);
+      }
+    }
 
     // Notify volunteers
     await notifyVolunteers({

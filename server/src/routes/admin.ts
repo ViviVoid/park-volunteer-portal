@@ -4,12 +4,37 @@ import { dbGet, dbAll, dbRun } from '../database';
 import { body, validationResult } from 'express-validator';
 import { notifyVolunteers } from '../services/notifications';
 import { salesforceService } from '../services/salesforce';
+import { GoogleAuthService } from '../services/googleAuth';
+import { GoogleCalendarService } from '../services/googleCalendar';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
 
+// Google OAuth callback - must be before authentication middleware
+// This route is called by Google, not by the authenticated user
+router.get('/google/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+
+    if (!code || !state) {
+      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/admin/google?error=missing_params`);
+    }
+
+    const { userId, email } = await GoogleAuthService.exchangeCodeForTokens(
+      code as string,
+      state as string
+    );
+
+    res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/admin/google?success=true&email=${encodeURIComponent(email)}`);
+  } catch (error: any) {
+    console.error('OAuth callback error:', error);
+    res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/admin/google?error=${encodeURIComponent(error.message)}`);
+  }
+});
+
+// All other routes require authentication
 router.use(authenticateToken);
 router.use(requireAdmin);
 
@@ -837,6 +862,16 @@ router.post('/positions', [
 
     const position = await dbGet('SELECT * FROM positions WHERE id = ?', [result.lastID]);
 
+    // Forward to Google Calendars based on policies
+    if (position) {
+      try {
+        await GoogleCalendarService.forwardPositionToCalendars(position);
+      } catch (error) {
+        console.error('Error forwarding position to Google Calendars:', error);
+        // Don't fail the request if calendar forwarding fails
+      }
+    }
+
     // Notify all volunteers about the new position
     await notifyVolunteers({
       positionId: result.lastID,
@@ -1289,6 +1324,364 @@ async function sendAnnouncement(announcement: any) {
     }
   }
 }
+
+// Google Account Integration Routes
+
+// Initiate Google OAuth flow
+router.get('/google/auth', async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Check if Google OAuth credentials are configured
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return res.status(500).json({ 
+        error: 'Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file.' 
+      });
+    }
+
+    const authUrl = GoogleAuthService.getAuthUrl(req.userId);
+    res.json({ authUrl });
+  } catch (error: any) {
+    console.error('Error generating Google auth URL:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate Google authorization URL' });
+  }
+});
+
+// Get user's Google accounts
+router.get('/google/accounts', async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const accounts = await GoogleAuthService.getUserAccounts(req.userId);
+    res.json(accounts);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Disconnect Google account
+router.delete('/google/accounts/:id', async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const accountId = parseInt(req.params.id);
+    await GoogleAuthService.disconnectAccount(accountId, req.userId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List calendars for a Google account
+router.get('/google/accounts/:id/calendars', async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const accountId = parseInt(req.params.id);
+    
+    // Verify account belongs to user
+    const account: any = await dbGet(
+      'SELECT * FROM google_accounts WHERE id = ? AND user_id = ?',
+      [accountId, req.userId]
+    );
+
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const calendars = await GoogleCalendarService.listCalendars(accountId);
+    res.json(calendars);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Set primary calendar for a Google account
+router.post('/google/accounts/:id/calendar', [
+  body('calendar_id').trim().notEmpty(),
+  body('calendar_name').trim().notEmpty()
+], async (req: AuthRequest, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const accountId = parseInt(req.params.id);
+    const { calendar_id, calendar_name } = req.body;
+
+    // Verify account belongs to user
+    const account: any = await dbGet(
+      'SELECT * FROM google_accounts WHERE id = ? AND user_id = ?',
+      [accountId, req.userId]
+    );
+
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    await GoogleCalendarService.setPrimaryCalendar(accountId, calendar_id, calendar_name);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Sync calendar events for scheduler
+router.post('/google/accounts/:id/sync', [
+  body('days_ahead').optional().isInt({ min: 1, max: 365 })
+], async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const accountId = parseInt(req.params.id);
+    const daysAhead = req.body.days_ahead || 30;
+
+    // Verify account belongs to user
+    const account: any = await dbGet(
+      'SELECT * FROM google_accounts WHERE id = ? AND user_id = ?',
+      [accountId, req.userId]
+    );
+
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const events = await GoogleCalendarService.syncCalendarEventsForScheduler(accountId, daysAhead);
+    res.json({ events, count: events.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Calendar Forwarding Policies
+
+// Get all forwarding policies
+router.get('/google/policies', async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const policies = await dbAll(`
+      SELECT 
+        cp.*,
+        ga.email as account_email,
+        pt.title as template_title,
+        lt.name as location_name
+      FROM calendar_forwarding_policies cp
+      LEFT JOIN google_accounts ga ON cp.google_account_id = ga.id
+      LEFT JOIN position_templates pt ON cp.position_template_id = pt.id
+      LEFT JOIN location_tags lt ON cp.location_id = lt.id
+      ORDER BY cp.created_at DESC
+    `);
+
+    res.json(policies);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create forwarding policy
+router.post('/google/policies', [
+  body('name').trim().notEmpty(),
+  body('google_account_id').isInt(),
+  body('target_calendar_id').trim().notEmpty(),
+  body('target_calendar_name').trim().notEmpty(),
+  body('position_template_id').optional().isInt(),
+  body('location_id').optional().isInt(),
+  body('target_email_group').optional().trim()
+], async (req: AuthRequest, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const {
+      name,
+      description,
+      google_account_id,
+      target_calendar_id,
+      target_calendar_name,
+      position_template_id,
+      location_id,
+      target_email_group
+    } = req.body;
+
+    // Verify account belongs to user
+    const account: any = await dbGet(
+      'SELECT * FROM google_accounts WHERE id = ? AND user_id = ?',
+      [google_account_id, req.userId]
+    );
+
+    if (!account) {
+      return res.status(404).json({ error: 'Google account not found' });
+    }
+
+    const result = await dbRun(
+      `INSERT INTO calendar_forwarding_policies 
+       (name, description, google_account_id, target_calendar_id, target_calendar_name, 
+        position_template_id, location_id, target_email_group, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        description || null,
+        google_account_id,
+        target_calendar_id,
+        target_calendar_name,
+        position_template_id || null,
+        location_id || null,
+        target_email_group || null,
+        req.userId
+      ]
+    );
+
+    const policy = await dbGet(
+      'SELECT * FROM calendar_forwarding_policies WHERE id = ?',
+      [result.lastID]
+    );
+
+    res.status(201).json(policy);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update forwarding policy
+router.put('/google/policies/:id', [
+  body('name').optional().trim().notEmpty(),
+  body('target_calendar_id').optional().trim().notEmpty(),
+  body('target_calendar_name').optional().trim().notEmpty()
+], async (req: AuthRequest, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const policyId = parseInt(req.params.id);
+
+    // Verify policy belongs to user
+    const policy: any = await dbGet(
+      `SELECT cp.* FROM calendar_forwarding_policies cp
+       JOIN google_accounts ga ON cp.google_account_id = ga.id
+       WHERE cp.id = ? AND ga.user_id = ?`,
+      [policyId, req.userId]
+    );
+
+    if (!policy) {
+      return res.status(404).json({ error: 'Policy not found' });
+    }
+
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (req.body.name !== undefined) {
+      updates.push('name = ?');
+      values.push(req.body.name);
+    }
+    if (req.body.description !== undefined) {
+      updates.push('description = ?');
+      values.push(req.body.description || null);
+    }
+    if (req.body.target_calendar_id !== undefined) {
+      updates.push('target_calendar_id = ?');
+      values.push(req.body.target_calendar_id);
+    }
+    if (req.body.target_calendar_name !== undefined) {
+      updates.push('target_calendar_name = ?');
+      values.push(req.body.target_calendar_name);
+    }
+    if (req.body.position_template_id !== undefined) {
+      updates.push('position_template_id = ?');
+      values.push(req.body.position_template_id || null);
+    }
+    if (req.body.location_id !== undefined) {
+      updates.push('location_id = ?');
+      values.push(req.body.location_id || null);
+    }
+    if (req.body.target_email_group !== undefined) {
+      updates.push('target_email_group = ?');
+      values.push(req.body.target_email_group || null);
+    }
+    if (req.body.is_active !== undefined) {
+      updates.push('is_active = ?');
+      values.push(req.body.is_active ? 1 : 0);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(policyId);
+
+    await dbRun(
+      `UPDATE calendar_forwarding_policies SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    const updated = await dbGet(
+      'SELECT * FROM calendar_forwarding_policies WHERE id = ?',
+      [policyId]
+    );
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete forwarding policy
+router.delete('/google/policies/:id', async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const policyId = parseInt(req.params.id);
+
+    // Verify policy belongs to user
+    const policy: any = await dbGet(
+      `SELECT cp.* FROM calendar_forwarding_policies cp
+       JOIN google_accounts ga ON cp.google_account_id = ga.id
+       WHERE cp.id = ? AND ga.user_id = ?`,
+      [policyId, req.userId]
+    );
+
+    if (!policy) {
+      return res.status(404).json({ error: 'Policy not found' });
+    }
+
+    await dbRun('DELETE FROM calendar_forwarding_policies WHERE id = ?', [policyId]);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 export default router;
 

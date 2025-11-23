@@ -4,6 +4,7 @@ import AdminHome from './admin/AdminHome';
 import VolunteerManagement from './admin/VolunteerManagement';
 import OrganizationCommunications from './admin/OrganizationCommunications';
 import InteractiveMapPage from './admin/InteractiveMap';
+import GoogleIntegration from './admin/GoogleIntegration';
 import './Dashboard.css';
 
 const AdminDashboard: React.FC = () => {
@@ -14,6 +15,7 @@ const AdminDashboard: React.FC = () => {
         <Route path="/volunteer-management" element={<VolunteerManagement />} />
         <Route path="/communications" element={<OrganizationCommunications />} />
         <Route path="/interactive-map" element={<InteractiveMapPage />} />
+        <Route path="/google" element={<GoogleIntegration />} />
       </Routes>
     </div>
   );

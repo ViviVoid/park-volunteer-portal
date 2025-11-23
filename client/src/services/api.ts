@@ -12,6 +12,26 @@ const api = axios.create({
 // Add token to requests
 let authToken: string | null = null;
 
+// Interceptor to ensure token is always included from localStorage if available
+api.interceptors.request.use(
+  (config) => {
+    // If no token in memory, try to get it from localStorage
+    if (!authToken) {
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        authToken = storedToken;
+        config.headers.Authorization = `Bearer ${storedToken}`;
+      }
+    } else {
+      config.headers.Authorization = `Bearer ${authToken}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export const authAPI = {
   setToken: (token: string | null) => {
     authToken = token;
@@ -75,6 +95,17 @@ export const adminAPI = {
   createRequirementTag: (data: any) => api.post('/admin/requirement-tags', data),
   updateRequirementTag: (id: number, data: any) => api.put(`/admin/requirement-tags/${id}`, data),
   deleteRequirementTag: (id: number) => api.delete(`/admin/requirement-tags/${id}`),
+  // Google Integration
+  getGoogleAuthUrl: () => api.get('/admin/google/auth'),
+  getGoogleAccounts: () => api.get('/admin/google/accounts'),
+  disconnectGoogleAccount: (id: number) => api.delete(`/admin/google/accounts/${id}`),
+  getGoogleCalendars: (accountId: number) => api.get(`/admin/google/accounts/${accountId}/calendars`),
+  setPrimaryCalendar: (accountId: number, data: any) => api.post(`/admin/google/accounts/${accountId}/calendar`, data),
+  syncCalendarEvents: (accountId: number, daysAhead?: number) => api.post(`/admin/google/accounts/${accountId}/sync`, { days_ahead: daysAhead }),
+  getCalendarPolicies: () => api.get('/admin/google/policies'),
+  createCalendarPolicy: (data: any) => api.post('/admin/google/policies', data),
+  updateCalendarPolicy: (id: number, data: any) => api.put(`/admin/google/policies/${id}`, data),
+  deleteCalendarPolicy: (id: number) => api.delete(`/admin/google/policies/${id}`),
 };
 
 export const volunteerAPI = {

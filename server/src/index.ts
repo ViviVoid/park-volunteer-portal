@@ -3,12 +3,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { initDatabase } from './database';
+
+// Load environment variables first, before importing routes that might use them
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
 import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
 import volunteerRoutes from './routes/volunteer';
 import { setupCronJobs } from './services/scheduler';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

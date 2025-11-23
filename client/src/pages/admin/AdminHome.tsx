@@ -15,6 +15,7 @@ const AdminHome: React.FC = () => {
             <Link to="/admin/volunteer-management" className="btn-primary">Volunteer Management</Link>
             <Link to="/admin/communications" className="btn-primary" style={{ marginTop: '1rem' }}>Organization Communications</Link>
             <Link to="/admin/interactive-map" className="btn-primary" style={{ marginTop: '1rem' }}>Interactive Map</Link>
+            <Link to="/admin/google" className="btn-primary" style={{ marginTop: '1rem' }}>Google Calendar Integration</Link>
           </div>
         </div>
       </div>
