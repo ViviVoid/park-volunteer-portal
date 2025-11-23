@@ -41,6 +41,15 @@ initDatabase().then(() => {
     res.json({ status: 'ok' });
   });
   
+  // Serve React app in production
+  if (process.env.NODE_ENV === 'production') {
+    const publicPath = path.join(__dirname, '../../public');
+    app.use(express.static(publicPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(publicPath, 'index.html'));
+    });
+  }
+  
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
